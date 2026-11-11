@@ -4487,8 +4487,9 @@ document.addEventListener('click', ev => {
 });
 
 /* ================= TRADINGVIEW (widget gratuito, carrega só quando a aba abre) ================= */
-const TV_MOEDAS = [['BTC','BINANCE:BTCUSDT','Bitcoin'],['ETH','BINANCE:ETHUSDT','Ethereum'],['SOL','BINANCE:SOLUSDT','Solana'],['MSTR','NASDAQ:MSTR','Strategy'],['HYPE','BYBIT:HYPEUSDT','Hyperliquid'],['AAVE','BINANCE:AAVEUSDT','Aave'],['PENDLE','BINANCE:PENDLEUSDT','Pendle'],['SYRUP','BINANCE:SYRUPUSDT','Maple (Syrup)'],['LIT','COINBASE:LITUSD','Lighter'],['COIN','NASDAQ:COIN','Coinbase'],['OURO','OANDA:XAUUSD','Ouro (XAU/USD)'],['S&P 500','OANDA:SPX500USD','S&P 500']];
+const TV_MOEDAS = [['BTC','BINANCE:BTCUSDT','Bitcoin'],['ETH','BINANCE:ETHUSDT','Ethereum'],['SOL','BINANCE:SOLUSDT','Solana'],['MSTR','NASDAQ:MSTR','Strategy'],['HYPE','BYBIT:HYPEUSDT','Hyperliquid'],['AAVE','BINANCE:AAVEUSDT','Aave'],['PENDLE','BINANCE:PENDLEUSDT','Pendle'],['SYRUP','BINANCE:SYRUPUSDT','Maple (Syrup)'],['LIT','BYBIT:LITUSDT','Lighter'],['COIN','NASDAQ:COIN','Coinbase'],['OURO','OANDA:XAUUSD','Ouro (XAU/USD)'],['S&P 500','OANDA:SPX500USD','S&P 500']];
 let TV_SIM = lsGetSeguro('ocp_tv_sim', 'BINANCE:BTCUSDT'), TV_FEITO = '';
+if (TV_SIM === 'COINBASE:LITUSD') TV_SIM = 'BYBIT:LITUSDT';
 if (!TV_MOEDAS.some(m => m[1] === TV_SIM)) TV_SIM = 'BINANCE:BTCUSDT';
 function lsGetSeguro(k, d){ try { return localStorage.getItem(k) || d; } catch(e){ return d; } }
 function tvAbre(forcar){
