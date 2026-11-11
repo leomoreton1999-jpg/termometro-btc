@@ -601,6 +601,7 @@ body.com-maxi{overflow:hidden}
 .mud{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:14px;padding:10px 14px;border:1px solid var(--regua2);border-radius:10px;background:var(--papel2);font-size:13px}
 .mud.tem{border-color:rgba(34,211,238,.5);background:linear-gradient(90deg,rgba(34,211,238,.1),var(--papel2) 60%)}
 .mud-it b{font-weight:700}
+.nt-lang{display:inline-flex;margin:0 0 12px}.nt-lang button{font-size:13px;padding:7px 14px}.nt-lang .nt-n{opacity:.7;margin-left:4px}
 /* notícias */
 .nt-filtro{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .chip.on{background:var(--tinta);color:var(--papel);border-color:var(--tinta)}
@@ -1174,6 +1175,7 @@ footer.legal{letter-spacing:.01em}
 <section id="noticias" data-aba="noticias">
   <div class="sec-cab"><span class="sec-tag">NOTÍCIAS</span><h2>O que está mexendo com o BTC</h2></div>
   <div class="nt-topo"><div class="card nt-rs" id="ntResumo" hidden></div><div class="card nt-ag" id="ntAgenda" hidden></div></div>
+  <div class="seg nt-lang" id="ntLang" role="group" aria-label="Idioma das notícias"></div>
   <div class="nt-barra"><div class="nt-dias" id="ntDias"></div><div class="nt-filtro" id="ntFiltro"></div></div>
   <div id="ntDestaques"></div>
   <div class="nt-cols" id="ntLista"><p class="vazio">Carregando notícias…</p></div>
@@ -1553,6 +1555,22 @@ async function precoVivo(){
   } catch(e){ if (e && (ERROS_FATAIS.includes(e.code) || /confirm|consent|permiss|insufficient_credits|access_denied/i.test((e.code||'') + ' ' + (e.message||'')))) PRECO_AO_PARA = true; }
 }
 setInterval(precoVivo, 30*60e3);
+// preço ao vivo direto da corretora (WebSocket público, sem servidor e sem chave); CoinGecko a cada 60 s se o WebSocket não abrir
+let PRECO_WS_ULT = 0, PRECO_PRIMEIRO = true;
+function precoNovo(usd, chg24){
+  if (!isFinite(usd) || usd <= 0) return; const t = Date.now();
+  PRECO_AO = {usd, chg24: isFinite(chg24) ? chg24 : null, t, hora: new Date(t).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})};
+  if (PRECO_PRIMEIRO){ PRECO_PRIMEIRO = false; try { renderTudo(); } catch(e){} return; }
+  topo(); const bp = document.querySelector('#bInfo .bi-p'); if (bp) bp.textContent = $('#pPreco').textContent;
+}
+async function precoRest(){ try { const j = await (await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true')).json(); precoNovo(+j.bitcoin.usd, +j.bitcoin.usd_24h_change); } catch(e){} }
+function precoWs(){
+  let abriu = false, ws;
+  try { ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@ticker'); } catch(e){ precoRest(); setInterval(precoRest, 60e3); return; }
+  ws.onopen = () => { abriu = true; };
+  ws.onmessage = ev => { const t = Date.now(); if (t - PRECO_WS_ULT < 5000) return; PRECO_WS_ULT = t; try { const d = JSON.parse(ev.data); precoNovo(+d.c, +d.P); } catch(e){} };
+  ws.onclose = () => { if (abriu) setTimeout(precoWs, 15000); else { precoRest(); setInterval(precoRest, 60e3); } };
+}
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') precoVivo(); });
 function precoFresco(){ const h = PRECO_H && isFinite(+PRECO_H.usd) && +PRECO_H.usd > 0 ? {usd:+PRECO_H.usd, chg24: isFinite(+PRECO_H.chg24) ? +PRECO_H.chg24 : null, t:+PRECO_H.t*1000, hora:PRECO_H.hora, f:'CoinGecko'} : null, a = PRECO_AO ? {...PRECO_AO, f:'Termômetro do BTC'} : null; return !h ? a : !a ? h : (a.t > h.t ? a : h); }
 function precoAtual(){ const f = precoFresco(); if (f) return f.usd; const R = DADOS.resumo; if (R && R.priceUsd && isFinite(R.priceUsd.current)) return R.priceUsd.current; const p = ultimo('btc_preco'); return p ? p[1] : null; }
@@ -2025,7 +2043,7 @@ function ideiasInsta(){
       leg: `${sai ? '🏃‍♂️' : '🏦'} ${sai ? 'Bitcoin saindo' : 'Bitcoin entrando'} das corretoras!\n\n🔄 Saldo em 7 dias: ${sinal(t7,0,' BTC')}${r ? `\n🏦 Reserva nas corretoras: ${fmtNum(r[1]/1e6,2)} milhões de BTC\n📆 Variação em 30 dias: ${sinal(vr,1,'%')}` : ''}\n\n📚 O que isso significa?\nO netflow é o que entrou menos o que saiu das corretoras no período: positivo = depósitos líquidos, negativo = saques líquidos. A reserva é o total de BTC guardado nas corretoras. Na prática, quem quer vender costuma mandar o bitcoin para uma corretora; quem quer guardar tira e leva para a própria carteira.\n📤 Saída = moedas indo para custódia própria (perfil de quem acumula).\n📥 Entrada = moedas chegando para possível venda.\n\n👉 Por que importa: ${sai ? 'menos BTC nas corretoras significa menos oferta disponível para venda imediata.' : 'mais BTC nas corretoras pode significar mais oferta disponível para venda nos próximos dias.'}\n\n💬 Seu bitcoin fica na corretora ou na sua carteira?` + H + ' #onchain',
       fmt:'Post único com o gráfico da reserva nas corretoras.'}); }
   // 7. Notícia principal
-  try { const ns = (NOTICIAS || []).slice().sort((a,b) => (b.data > a.data ? 1 : b.data < a.data ? -1 : 0) || relev(b) - relev(a)), n = ns[0];
+  try { const ns = (NOTICIAS || []).filter(n => (n.lang || 'pt') === 'pt').slice().sort((a,b) => (b.data > a.data ? 1 : b.data < a.data ? -1 : 0) || relev(b) - relev(a)), n = ns[0];
     if (n) I.push({k:'nt1', n, p: relev(n)*15, chart:null, tag:'Notícia', num: fmtData(String(n.data).slice(0,10)).slice(0,5), sub: n.fonte || '', tit: n.titulo, img: n.resumo || '',
       leg: `📰 ${n.titulo}\n\n${n.resumo || ''}\n\n🔗 Fonte: ${n.fonte || ''}${igUrl(n) ? '\n' + igUrl(n) : ''}\n\n💬 O que você acha disso?` + H + ' #noticias',
       fmt:'Post de notícia (texto sobre fundo escuro) ou stories com o link da matéria.'}); } catch(e){}
@@ -2063,7 +2081,7 @@ function ideiasInsta(){
     if (ag.length) I.push({k:'agenda', p: 40, chart:null, tag:'Agenda', num: fmtData(ag[0].data).slice(0,5), sub: ag[0].evento, tit: 'Agenda macro que pode mexer com o bitcoin',
       img: ag.map(i => `${fmtData(i.data).slice(0,5)}${i.hora ? ' ' + i.hora : ''}: ${i.evento}${i.esperado ? ' (esperado ' + i.esperado + ')' : ''}.`).join(' '),
       leg: `🗓️ Agenda da semana que pode mexer com o bitcoin\n\n${ag.map(i => `📌 ${fmtData(i.data).slice(0,5)}${i.hora ? ' às ' + i.hora : ''}: ${i.evento}${i.esperado ? ` (esperado: ${i.esperado})` : ''}`).join('\n')}\n\n📚 Por que olhar a agenda?\nDados de inflação (CPI, PCE), emprego (payroll) e decisões de juros do Fed mudam a expectativa de juros nos EUA. Juros mais baixos = mais liquidez = historicamente bom para o bitcoin. Nesses dias a volatilidade costuma subir.\n\n⏰ Horários de Brasília.\n\n💬 Qual desses eventos você vai acompanhar?` + H2 + ' #agenda #fed'}); } catch(e){}
-  try { const ns = (NOTICIAS || []).slice().sort((a,b) => (b.data > a.data ? 1 : b.data < a.data ? -1 : 0) || relev(b) - relev(a));
+  try { const ns = (NOTICIAS || []).filter(n => (n.lang || 'pt') === 'pt').slice().sort((a,b) => (b.data > a.data ? 1 : b.data < a.data ? -1 : 0) || relev(b) - relev(a));
     ns.slice(1, 4).forEach((n, j) => I.push({k:'nt' + (j+2), n, p: relev(n)*10 - j*5, chart:null, tag:'Notícia', num: fmtData(String(n.data).slice(0,10)).slice(0,5), sub: n.fonte || '', tit: n.titulo, img: n.resumo || '',
       leg: `📰 ${n.titulo}\n\n${n.resumo || ''}\n\n🔗 Fonte: ${n.fonte || ''}${igUrl(n) ? '\n' + igUrl(n) : ''}\n\n💬 O que você acha disso?` + H2 + ' #noticias', fmt:'Post de notícia ou stories com o link da matéria.'})); } catch(e){}
   try { if (POOLS && POOLS.length){ const st2 = POOLS.filter(p => p.st && !p.anom && p.tvl >= 5e7 && p.m30 > 0 && p.apy > 0 && p.m30 <= p.apy*4 && p.apy <= p.m30*4).sort((a,b) => b.m30 - a.m30).slice(0, 3);
@@ -5010,12 +5028,12 @@ function plTabela(){
 }
 
 /* ================= NOTÍCIAS ================= */
-let NT_ETF_HOLD = null, NT_DIA = null, NOTICIAS = null, NT_RESUMO = null, NT_AGENDA = null, NT_ETF = null, NT_LIQ = null, NT_FONTE = 'todas';
+let NT_LANG = 'pt', NT_ETF_HOLD = null, NT_DIA = null, NOTICIAS = null, NT_RESUMO = null, NT_AGENDA = null, NT_ETF = null, NT_LIQ = null, NT_FONTE = 'todas';
 const NT_EF = {positivo:['BOM PARA O BTC','oport'], negativo:['RUIM PARA O BTC','alerta'], neutro:['NEUTRO','atencao']};
 const NT_CATS = [['onchain','On-chain e ETFs'], ['macro','Macro'], ['inst','Institucional']];
 function assinaNoticias(){
   if (!DB) return;
-  try { DB.collection('noticias').orderBy('data','desc').limit(80).onSnapshot(snap => { NOTICIAS = snap.docs.map(d => d.data()).filter(n => n && n.titulo); renderNoticias(); }, () => { NOTICIAS = NOTICIAS || []; renderNoticias(); }); } catch(e){ NOTICIAS = []; }
+  try { DB.collection('noticias').orderBy('data','desc').limit(500).onSnapshot(snap => { NOTICIAS = snap.docs.map(d => d.data()).filter(n => n && n.titulo); renderNoticias(); }, () => { NOTICIAS = NOTICIAS || []; renderNoticias(); }); } catch(e){ NOTICIAS = []; }
   try { DB.collection('noticias_meta').doc('resumo').onSnapshot(d => { NT_RESUMO = d.exists ? d.data() : null; renderNoticias(); }, () => {}); } catch(e){}
   try { DB.collection('noticias_meta').doc('etf_hold').onSnapshot(d => { NT_ETF_HOLD = d.exists ? d.data() : null; if (ABA === 'etfs') renderEtfs(); }, () => {}); } catch(e){}
   try { DB.collection('noticias_meta').doc('liq').onSnapshot(d => { NT_LIQ = d.exists ? d.data() : null; cartaoLiq24(); }, () => {}); } catch(e){}
@@ -5029,12 +5047,12 @@ const relev = n => Math.max(1, Math.min(5, +n.relevancia || 3));
 const ordemNt = (a, b) => relev(b) - relev(a) || String(b.data||'').localeCompare(String(a.data||''));
 function itemNoticia(n, mini){
   const ef = NT_EF[n.impacto] || NT_EF.neutro, url = /^https:\/\//.test(n.url || '') ? n.url : '', r = relev(n);
-  return `<article class="card nt ${ef[1]}"><div class="nt-top"><span class="nt-rel" title="Relevância ${r} de 5">${'●'.repeat(r)}<span>${'●'.repeat(5-r)}</span></span><span class="pill p-${ef[1]}">${ef[0]}</span></div>
+  return `<article class="card nt ${n.impacto ? ef[1] : ''}"><div class="nt-top"><span class="nt-rel" title="Relevância ${r} de 5">${'●'.repeat(r)}<span>${'●'.repeat(5-r)}</span></span>${n.impacto ? `<span class="pill p-${ef[1]}">${ef[0]}</span>` : ''}</div>
     <h3>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(n.titulo)}</a>` : esc(n.titulo)}</h3>
     ${mini ? '' : `<p>${esc(n.resumo || '')}</p>`}<div class="nt-meta">${esc(n.fonte || '')}${n.data ? ' · ' + fmtData(String(n.data).slice(0,10)) : ''}${mini && n.cat ? ' · ' + esc((NT_CATS.find(c => c[0] === n.cat) || ['',''])[1]) : ''}</div></article>`;
 }
 function renderNoticias(){
-  const L = (NOTICIAS || []).filter(n => NT_FONTE === 'todas' || n.fonte === NT_FONTE);
+  const ntLang = n => n.lang || 'pt', L = (NOTICIAS || []).filter(n => ntLang(n) === NT_LANG && (NT_FONTE === 'todas' || n.fonte === NT_FONTE));
   const mini = $('#ntMini');
   if (mini){ const ult = (NOTICIAS || []).map(n => String(n.data||'')).sort().pop() || '', rec = (NOTICIAS || []).filter(n => ult && dnum(ult) - dnum(String(n.data).slice(0,10)) <= 2);
     mini.innerHTML = !NOTICIAS ? '<p class="vazio">Carregando…</p>' : rec.sort(ordemNt).slice(0,3).map(n => itemNoticia(n, true)).join('') || '<p class="vazio">Sem notícias ainda.</p>'; }
@@ -5047,7 +5065,8 @@ function renderNoticias(){
   ag.innerHTML = itens.length ? `<div class="r-nome">Agenda · principais eventos · horário de Brasília</div><ul class="ag-lista">${itens.slice(0,5).map(i => `<li class="ag-p${Math.max(1, Math.min(3, +i.peso || 1))}"><span class="ag-d">${fmtData(String(i.data)).slice(0,5)}${i.hora ? ' ' + esc(i.hora) : ''}</span><span class="ag-e"><b>${esc(i.evento)}</b>${i.esperado ? `<em>${esc(i.esperado)}</em>` : ''}</span><span class="ag-peso">${'●'.repeat(Math.max(1, Math.min(3, +i.peso || 1)))}</span></li>`).join('')}</ul>` : '';
   ag.hidden = !ag.innerHTML;
   if (!NOTICIAS){ el.innerHTML = '<p class="vazio">' + (DB ? 'Carregando notícias…' : 'As notícias aparecem no link publicado do painel.') + '</p>'; return; }
-  const fontes = ['todas'].concat([...new Set(NOTICIAS.map(n => n.fonte).filter(Boolean))]);
+  const fontes = ['todas'].concat([...new Set(NOTICIAS.filter(n => ntLang(n) === NT_LANG).map(n => n.fonte).filter(Boolean))]);
+  $('#ntLang').innerHTML = [['pt','Português'],['en','Inglês']].map(([k, t]) => `<button type="button" data-lang="${k}" class="${NT_LANG === k ? 'on' : ''}" aria-pressed="${NT_LANG === k}">${t} <span class="nt-n">${NOTICIAS.filter(n => ntLang(n) === k).length}</span></button>`).join('');
   $('#ntFiltro').innerHTML = fontes.map(t => `<button type="button" class="chip${t === NT_FONTE ? ' on' : ''}" data-t="${esc(t)}">${t === 'todas' ? 'Todas as fontes' : esc(t)}</button>`).join('');
   // um dia por vez: o mais recente por padrão
   const diaDe = n => String(n.data || '').slice(0,10), dias = [...new Set(L.map(diaDe).filter(Boolean))].sort().reverse();
@@ -5060,6 +5079,7 @@ function renderNoticias(){
   el.innerHTML = !D.length ? '<p class="vazio">Sem notícias neste dia.</p>' : !resto.length ? '' : NT_CATS.map(([k, nome]) => { const g = resto.filter(n => (n.cat || 'macro') === k);
     return `<div class="nt-col"><div class="nt-col-cab"><span>${esc(nome)}</span><span class="nt-n">${g.length}</span></div>${g.length ? g.map(n => itemNoticia(n, true)).join('') : '<p class="vazio">Nada mais nesta categoria hoje.</p>'}</div>`; }).join('');
 }
+$('#ntLang').addEventListener('click', ev => { const b = ev.target.closest('button[data-lang]'); if (!b) return; NT_LANG = b.dataset.lang; NT_FONTE = 'todas'; NT_DIA = null; renderNoticias(); });
 $('#ntFiltro').addEventListener('click', ev => { const b = ev.target.closest('button[data-t]'); if (!b) return; NT_FONTE = b.dataset.t; renderNoticias(); });
 $('#ntDias').addEventListener('click', ev => { const b = ev.target.closest('button[data-dia]'); if (!b) return; NT_DIA = b.dataset.dia; renderNoticias(); });
 
@@ -5088,7 +5108,7 @@ mostraAba(ABA);
   if (!DB){ MODO = 'local'; aviso('Armazenamento compartilhado indisponível nesta visualização (ex.: preview do chat). Abra pelo link publicado para salvar e buscar dados.'); renderTudo(); return; }
   try { DADOS = await carrega(); MODO = 'real'; META_VISTA = DADOS.meta && DADOS.meta.atualizado; CARREGADO = true; }
   catch(e){ MODO = 'local'; aviso('<b>Falha ao ler os dados salvos ('+esc(e.code||e.message||e)+').</b>', true); }
-  renderTudo(); autoBusca(); assinaNoticias();
+  renderTudo(); autoBusca(); assinaNoticias(); precoWs();
   DB.collection('mercado').doc('meta').onSnapshot(async s => {
     if (!s.exists || MODO === 'exemplo') return;
     const at = s.data().atualizado; if (!at || at === META_VISTA) return;
