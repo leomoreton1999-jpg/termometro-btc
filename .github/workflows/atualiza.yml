@@ -3,6 +3,9 @@ on:
   schedule:
     - cron: '0 10 * * *'   # 7h de Brasília, todo dia
   workflow_dispatch: {}     # botão "Run workflow" para rodar na hora
+  push:                     # roda também quando o robô é alterado (os commits de dados não disparam)
+    branches: [main]
+    paths: ['scripts/**', '.github/workflows/**']
 permissions:
   contents: write
 concurrency: atualiza
