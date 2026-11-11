@@ -601,6 +601,9 @@ body.com-maxi{overflow:hidden}
 .mud{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:14px;padding:10px 14px;border:1px solid var(--regua2);border-radius:10px;background:var(--papel2);font-size:13px}
 .mud.tem{border-color:rgba(34,211,238,.5);background:linear-gradient(90deg,rgba(34,211,238,.1),var(--papel2) 60%)}
 .mud-it b{font-weight:700}
+.tv-moedas{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.tv-moedas button{font-size:12.5px;padding:6px 12px;font-weight:600}.tv-moedas button.on{background:var(--tinta);border-color:var(--tinta);color:var(--papel)}
+.tv-box{padding:0;overflow:hidden}.tv-graf{height:max(560px, calc(100vh - 230px));width:100%}.tv-graf .tradingview-widget-container{height:100%;width:100%}
+@media (max-width:640px){.tv-graf{height:max(520px, calc(100vh - 200px))}}
 .nt-lang{display:inline-flex;margin:0 0 12px}.nt-lang button{font-size:13px;padding:7px 14px}.nt-lang .nt-n{opacity:.7;margin-left:4px}
 /* notícias */
 .nt-filtro{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
@@ -1034,7 +1037,7 @@ footer.legal{letter-spacing:.01em}
 </header>
 <div class="barra">
   <nav class="secoes" aria-label="Abas">
-    <button type="button" data-ir="hoje">Mercado</button><button type="button" data-ir="onchain">On-chain</button><button type="button" data-ir="derivativos">Derivativos</button><button type="button" data-ir="etfs">ETFs</button><button type="button" data-ir="macro">Macro</button><button type="button" data-ir="pools">Pools</button><button type="button" data-ir="noticias">Notícias</button><button type="button" data-ir="graficos">Gráficos</button><button type="button" data-ir="ia">On Crypto AI</button><button type="button" data-ir="pastas">Pastas</button>
+    <button type="button" data-ir="hoje">Mercado</button><button type="button" data-ir="onchain">On-chain</button><button type="button" data-ir="derivativos">Derivativos</button><button type="button" data-ir="etfs">ETFs</button><button type="button" data-ir="macro">Macro</button><button type="button" data-ir="pools">Pools</button><button type="button" data-ir="noticias">Notícias</button><button type="button" data-ir="graficos">Gráficos</button><button type="button" data-ir="tv">TradingView</button><button type="button" data-ir="ia">On Crypto AI</button><button type="button" data-ir="pastas">Pastas</button>
   </nav>
   <div class="barra-info" id="bInfo"></div>
 </div>
@@ -1188,6 +1191,13 @@ footer.legal{letter-spacing:.01em}
     <aside class="card gx-lista" id="gxLista" aria-label="Indicadores"></aside>
     <div class="gx-area" id="gxArea"></div>
   </div>
+</section>
+
+<section id="tvAba" data-aba="tv">
+  <div class="sec-cab"><span class="sec-tag">TRADINGVIEW</span><h2>Gráfico avançado</h2></div>
+  <div class="tv-moedas" id="tvMoedas" role="group" aria-label="Moeda do gráfico"></div>
+  <div class="card tv-box"><div id="tvGraf" class="tv-graf"><p class="vazio">Carregando o gráfico do TradingView…</p></div></div>
+  <p class="fonte-sec">Gráfico e dados do TradingView, ao vivo. Já abre com médias móveis (EMA 21 e 200), Bandas de Bollinger, volume, RSI e MACD; use o botão de indicadores do gráfico para tirar ou pôr outros, e a busca no canto superior esquerdo para qualquer outro ativo. Desenhos ficam só no seu navegador.</p>
 </section>
 
 <section id="ia" data-aba="ia">
@@ -4476,6 +4486,24 @@ document.addEventListener('click', ev => {
   const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
 });
 
+/* ================= TRADINGVIEW (widget gratuito, carrega só quando a aba abre) ================= */
+const TV_MOEDAS = [['BTC','BINANCE:BTCUSDT'],['ETH','BINANCE:ETHUSDT'],['SOL','BINANCE:SOLUSDT'],['HYPE','BYBIT:HYPEUSDT'],['LIT','BYBIT:LITUSDT'],['XRP','BINANCE:XRPUSDT'],['BNB','BINANCE:BNBUSDT'],['DOGE','BINANCE:DOGEUSDT'],['ADA','BINANCE:ADAUSDT'],['TRX','BINANCE:TRXUSDT'],['LINK','BINANCE:LINKUSDT'],['AVAX','BINANCE:AVAXUSDT'],['SUI','BINANCE:SUIUSDT'],['TON','BINANCE:TONUSDT'],['LTC','BINANCE:LTCUSDT'],['ENA','BINANCE:ENAUSDT'],['AAVE','BINANCE:AAVEUSDT'],['PAXG','BINANCE:PAXGUSDT']];
+let TV_SIM = lsGetSeguro('ocp_tv_sim', 'BINANCE:BTCUSDT'), TV_FEITO = '';
+function lsGetSeguro(k, d){ try { return localStorage.getItem(k) || d; } catch(e){ return d; } }
+function tvAbre(forcar){
+  const el = $('#tvGraf'); if (!el) return;
+  $('#tvMoedas').innerHTML = TV_MOEDAS.map(([n, s]) => `<button type="button" data-tv="${s}" class="${s === TV_SIM ? 'on' : ''}" aria-pressed="${s === TV_SIM}">${n}</button>`).join('');
+  if (TV_FEITO === TV_SIM && !forcar) return; TV_FEITO = TV_SIM;
+  const cfg = {autosize: true, symbol: TV_SIM, interval: 'D', timezone: 'America/Sao_Paulo', theme: 'dark', style: '1', locale: 'br', backgroundColor: '#111316', gridColor: 'rgba(255,255,255,0.05)',
+    allow_symbol_change: true, hide_side_toolbar: false, withdateranges: true, details: false, calendar: false, hide_volume: false, save_image: true, support_host: 'https://www.tradingview.com',
+    studies: ['STD;EMA', 'STD;Bollinger_Bands', 'STD;RSI', 'STD;MACD']};
+  el.innerHTML = '<div class="tradingview-widget-container"><div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div></div>';
+  const s = document.createElement('script'); s.type = 'text/javascript'; s.async = true; s.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  s.textContent = JSON.stringify(cfg); s.onerror = () => { el.innerHTML = '<p class="vazio">Não foi possível carregar o TradingView agora. Confira a internet e abra a aba de novo.</p>'; TV_FEITO = ''; };
+  el.querySelector('.tradingview-widget-container').appendChild(s);
+}
+document.addEventListener('click', ev => { const b = ev.target.closest('#tvMoedas [data-tv]'); if (!b) return; TV_SIM = b.dataset.tv; try { localStorage.setItem('ocp_tv_sim', TV_SIM); } catch(e){} tvAbre(); });
+
 /* ================= ABAS ================= */
 function mostraAba(aba, alvo){
   if (['leitura','principais','indicadores'].includes(aba)) aba = 'hoje';
@@ -4487,7 +4515,7 @@ function mostraAba(aba, alvo){
   document.querySelectorAll('[data-aba]').forEach(el => { el.hidden = el.dataset.aba !== aba; });
   document.querySelectorAll('nav.secoes [data-ir]').forEach(b => b.setAttribute('aria-current', b.dataset.ir === aba ? 'page' : 'false'));
   
-  renderTudo();
+  renderTudo(); if (aba === 'tv') tvAbre();
   if (alvo){ const el = document.getElementById(alvo); if (el) el.scrollIntoView({block:'start'}); }
   else window.scrollTo(0, 0);
 }
