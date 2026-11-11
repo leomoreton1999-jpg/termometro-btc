@@ -127,6 +127,35 @@ async function noticias(){
   return entrou + ' novas, ' + Object.keys(fica).length + ' guardadas' + (erros.length ? ' (falhou: ' + erros.join(', ') + ')' : '');
 }
 
+/* ---------- Agenda (calendários oficiais: Fed, BLS, BEA e BCE; datas conferidas em 11/11/2026) ---------- */
+// [data, hora local da fonte, fuso da fonte ('ET' ou 'CET'), evento, peso]. Atualizar 1x por ano com os calendários novos.
+const CAL = [
+  ...['2026-12-09','2027-01-27','2027-03-17','2027-04-28','2027-06-09','2027-07-28','2027-09-15','2027-10-27','2027-12-08'].map(d => [d, '14:00', 'ET', 'Decisão de juros do Fed (FOMC)', 3]),
+  ...['2026-12-10','2027-01-13','2027-02-11','2027-03-10','2027-04-13','2027-05-12','2027-06-10','2027-07-14','2027-08-11','2027-09-14','2027-10-14','2027-11-10','2027-12-10'].map(d => [d, '08:30', 'ET', 'Inflação ao consumidor dos EUA (CPI)', 3]),
+  ...['2026-12-04','2027-01-08','2027-02-05','2027-03-05','2027-04-02','2027-05-07','2027-06-04','2027-07-02','2027-08-06','2027-09-03','2027-10-08','2027-11-05','2027-12-03'].map(d => [d, '08:30', 'ET', 'Relatório de emprego dos EUA (payroll)', 3]),
+  ...['2026-11-13','2026-12-15','2027-01-14','2027-02-12','2027-03-12','2027-04-14','2027-05-13','2027-06-11','2027-07-15','2027-08-10','2027-09-10','2027-10-15','2027-11-12','2027-12-15'].map(d => [d, '08:30', 'ET', 'Inflação ao produtor dos EUA (PPI)', 2]),
+  ['2026-11-25', '08:30', 'ET', 'Inflação PCE e renda pessoal dos EUA', 3], ['2026-12-23', '08:30', 'ET', 'Inflação PCE e renda pessoal dos EUA', 3],
+  ['2026-11-25', '08:30', 'ET', 'PIB dos EUA (3º tri, 2ª estimativa)', 2], ['2026-12-23', '08:30', 'ET', 'PIB dos EUA (3º tri, 3ª estimativa)', 2],
+  ...['2026-12-17','2027-02-04','2027-03-18','2027-04-29','2027-06-10','2027-07-22','2027-09-09','2027-10-28','2027-12-16'].map(d => [d, '14:15', 'CET', 'Decisão de juros do BCE', 2])
+];
+// horário de verão dos EUA e da Europa (o Brasil não tem): define quantas horas somar/subtrair para Brasília
+const verao = (d, ini, fim) => d >= ini && d < fim;
+function horaBR(d, h, fuso){
+  const y = d.slice(0, 4), [hh, mm] = h.split(':').map(Number);
+  const dif = fuso === 'ET' ? (verao(d, {2026: '2026-03-08', 2027: '2027-03-14'}[y] || '', {2026: '2026-11-01', 2027: '2027-11-07'}[y] || '') ? 1 : 2)
+                            : (verao(d, {2026: '2026-03-29', 2027: '2027-03-28'}[y] || '', {2026: '2026-10-25', 2027: '2027-10-31'}[y] || '') ? -5 : -4);
+  return String(hh + dif).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+async function agenda(){
+  const hoje = agoraBR().data, prox = CAL.filter(e => e[0] >= hoje).sort((a, b) => (a[0] + a[1]).localeCompare(b[0] + b[1]));
+  if (!prox.length) throw new Error('calendário acabou: atualizar a lista CAL com as datas do ano seguinte');
+  const fortes = prox.filter(e => e[4] >= 3).slice(0, 5), sel = (fortes.length >= 5 ? fortes : prox.slice(0, 5)).sort((a, b) => (a[0] + a[1]).localeCompare(b[0] + b[1]));
+  const meta = ler('noticias_meta');
+  meta.agenda = {atualizado: hoje, fonte: 'Fed, BLS, BEA e BCE', itens: sel.map(([data, h, fuso, evento, peso]) => ({data, hora: horaBR(data, h, fuso), evento, esperado: '', peso}))};
+  gravar('noticias_meta', meta);
+  return meta.agenda.itens.map(i => i.data.slice(8) + '/' + i.data.slice(5, 7) + ' ' + i.evento.split(' (')[0]).join('; ');
+}
+
 /* ---------- Alphractal (API com chave, 10 créditos por chamada) ---------- */
 const AX = (process.env.ALPHRACTAL_API_URL || 'https://api.alphractal.com').replace(/\/+$/, '');
 async function ax(caminho, q = {}){
@@ -237,5 +266,6 @@ async function alphractal(){
 await parte('Pools', pools);
 await parte('ETFs', etfs);
 await parte('Notícias', noticias);
+await parte('Agenda', agenda);
 await parte('Alphractal', alphractal);
 console.log(relatorio.join('\n'));
