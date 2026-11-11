@@ -210,8 +210,9 @@ const camel = o => Array.isArray(o) ? o.map(camel) : o && typeof o === 'object' 
 function niveisLiq(sn){
   const pm = sn.priceMid || [], L = sn.activeLongLiqUsd || [], Sh = sn.activeShortLiqUsd || [], pr = +sn.lastClose, out = [];
   pm.forEach((p, i) => { const l = p < pr ? +L[i] || 0 : 0, s = p > pr ? +Sh[i] || 0 : 0; if (l > 0 || s > 0) out.push({p: +p, l, s}); });
-  out.sort((a, b) => Math.max(b.l, b.s) - Math.max(a.l, a.s));
-  const top = out.slice(0, 24).sort((a, b) => b.p - a.p);
+  // os 12 maiores de cada lado: longs (abaixo do preço) e shorts (acima). Pegar os 24 maiores juntos deixava só longs.
+  const lado = k => out.filter(n => n[k] > 0).sort((a, b) => b[k] - a[k]).slice(0, 12);
+  const top = lado('l').concat(lado('s')).sort((a, b) => b.p - a.p);
   if (!top.length) return null;
   return {data: String(sn.lastBucketTime || '').slice(0, 10), t: sn.lastBucketTime || new Date().toISOString(), tf: sn.timeframe, preco: pr || null, niveis: top};
 }
