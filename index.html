@@ -1348,7 +1348,7 @@ const SERVIDOR = 'alphractal';
 
 /* ================= ESTADO ================= */
 let DADOS = vazio(), DB = null, MCP = null, MODO = 'carregando', META_VISTA = null;
-function vazio(){ return {series:{}, resumo:null, liq:null, velas:null, liqHist:[], meta:null}; }
+function vazio(){ return {series:{}, resumo:null, liq:null, velas:null, liqHist:[], meta:null, mapas:{}}; }
 
 /* ================= UTIL ================= */
 const $ = s => document.querySelector(s);
@@ -2981,7 +2981,8 @@ async function carrega(){
   const novo = vazio();
   const snap = await DB.collection('series').get();
   snap.docs.forEach(d=>{ const b = d.data(); if (b && typeof b.pts === 'string') novo.series[d.id] = desserializaPts(b.pts); });
-  const [res, liq, meta, vel, lh] = await Promise.all(['resumo','liquidacoes','meta','velas','liq_hist'].map(id=>DB.collection('mercado').doc(id).get()));
+  const [res, liq, meta, vel, lh, m7, m90, m365] = await Promise.all(['resumo','liquidacoes','meta','velas','liq_hist','mapa_7d','mapa_90d','mapa_365d'].map(id=>DB.collection('mercado').doc(id).get()));
+  novo.mapas = {}; [['7d', m7], ['90d', m90], ['365d', m365]].forEach(([k, d]) => { if (d.exists && d.data().liq) novo.mapas[k] = {liq: d.data().liq, velas: velasDeserial(d.data().velas)}; });
   if (res.exists) novo.resumo = res.data();
   if (liq.exists) novo.liq = liq.data();
   if (vel.exists) novo.velas = velasDeserial(vel.data());
@@ -3341,6 +3342,7 @@ async function buscarMapa(per){
 function abrePeriodo(){
   const per = MAPA.per;
   if (per === '30d'){ MAPA.liq = null; MAPA.velas = null; mapaLiq(); if (!DADOS.liq && MCP) buscarMapa('30d'); return; }
+  const g = DADOS.mapas && DADOS.mapas[per]; if (!MCP && g){ MAPA.liq = g.liq; MAPA.velas = g.velas; mapaLiq(); return; }
   const c = MAPA.cache[per];
   if (c && Date.now() - c.em < 30*60e3){ MAPA.liq = c.liq; MAPA.velas = c.velas; mapaLiq(); return; }
   MAPA.liq = null; MAPA.velas = null; mapaLiq();
@@ -3356,7 +3358,7 @@ function mapaLiq(){
   $('#mpErro').hidden = !MAPA.erro; $('#mpErro').textContent = MAPA.erro ? 'Não foi possível atualizar o mapa: ' + MAPA.erro : '';
   const g = $('#mpGraf'), lado = $('#mpLado');
   if (!liq || !liq.niveis || !liq.niveis.length){
-    g.innerHTML = '<p class="mp-vazio">' + (MAPA.per === '30d' ? 'Sem mapa salvo. Clique em Atualizar mapa ou em Atualizar dados.' : (MAPA.carregando || MCP ? 'Carregando ' + PER_LIQ[MAPA.per].nome + '…' : 'Abra pelo painel com o conector de dados para carregar ' + PER_LIQ[MAPA.per].nome + '.')) + '</p>';
+    g.innerHTML = '<p class="mp-vazio">' + (MAPA.per === '30d' ? 'Sem mapa salvo. Clique em Atualizar mapa ou em Atualizar dados.' : (MAPA.carregando || MCP ? 'Carregando ' + PER_LIQ[MAPA.per].nome + '…' : 'O mapa de ' + PER_LIQ[MAPA.per].nome + ' aparece depois da próxima atualização diária.')) + '</p>';
     lado.innerHTML = ''; $('#mpSetup').innerHTML = ''; analiseLiq(null); return;
   }
   const pAt = liq.preco || (velas && velas.pts.length ? velas.pts[velas.pts.length-1][4] : media(liq.niveis.map(n=>n.p)));

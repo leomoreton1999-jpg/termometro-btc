@@ -127,10 +127,111 @@ async function noticias(){
   return entrou + ' novas, ' + Object.keys(fica).length + ' guardadas' + (erros.length ? ' (falhou: ' + erros.join(', ') + ')' : '');
 }
 
-/* ---------- Alphractal (aguardando endereço da API) ---------- */
+/* ---------- Alphractal (API com chave, 10 créditos por chamada) ---------- */
+const AX = (process.env.ALPHRACTAL_API_URL || 'https://api.alphractal.com').replace(/\/+$/, '');
+async function ax(caminho, q = {}){
+  const u = new URL(AX + caminho); Object.entries(q).forEach(([k, v]) => { if (v != null) u.searchParams.set(k, v); });
+  const r = await fetch(u, {headers: {'X-Api-Key': process.env.ALPHRACTAL_API_KEY, 'Accept': 'application/json'}, signal: AbortSignal.timeout(120000)});
+  if (r.status === 429){ await espera(5000); return ax(caminho, q); }
+  if (!r.ok) throw new Error(caminho + ' HTTP ' + r.status + ' ' + (await r.text()).slice(0, 120));
+  return r.json();
+}
+// mesmas séries do painel (constante BUSCAS), com o caminho de cada uma na API
+const S = (ind, cam, o = {}) => ({ind, cam, ...o});
+const BUSCAS = [
+  S('btc_preco', '/btc/market/PriceUSD', {desde: '2011-01-01'}),
+  S('mvrv', '/btc/market/CapMVRVCur', {desde: '2011-01-01'}),
+  S('nupl', '/btc/market/Nupl', {desde: '2011-01-01'}),
+  S('realized_price', '/btc/lifespan/realized_price', {desde: '2011-01-01'}),
+  S('sth_realized_price', '/btc/lifespan/sth_realized_price', {desde: '2011-01-01'}),
+  S('lth_realized_price', '/btc/lifespan/lth_realized_price', {desde: '2011-01-01'}),
+  S('true_market_mean', '/btc/lifespan/true_market_mean_price', {desde: '2011-01-01'}),
+  S('active_realized_price', '/btc/lifespan/active_realized_price'),
+  S('investor_price', '/btc/lifespan/investor_price'),
+  S('alpha_price', '/btc/lifespan/alpha_price'),
+  S('lth_supply_in_profit_pct', '/btc/market/lth_supply_in_profit_pct', {desde: '2011-01-01'}),
+  S('sth_supply_in_profit_pct', '/btc/market/sth_supply_in_profit_pct', {desde: '2011-01-01'}),
+  S('reserva', '/btc/exchange_flow/exchange_reserve'),
+  S('netflow', '/btc/exchange_flow/exchange_netflow'),
+  S('entrada_ex', '/btc/exchange_flow/FlowInExNtv'),
+  S('saida_ex', '/btc/exchange_flow/FlowOutExNtv'),
+  S('enderecos', '/btc/addresses/AdrActCnt'),
+  S('hashrate', '/btc/mining/HashRate', {fator: 1e-6}),
+  S('funding', '/btc/derivatives/Funding_Rate', {fator: 100, desde: '2020-01-01', campo: 'value'}),
+  S('oi_usd', '/btc/derivatives/Open_Interest', {desde: '2020-01-01', campo: 'Open_Interest_Usd', tf: '1d'}),
+  S('whale_ratio', '/btc/derivatives/whale_vs_retail_ratio', {tf: '1d'}),
+  S('whale_delta', '/btc/derivatives/whale_vs_retail_delta', {desde: '2020-01-01', tf: '1d'}),
+  S('toptrader', '/btc/derivatives/toptrader_long_short_ratio', {desde: '2020-01-01', tf: '1d'}),
+  S('taker', '/btc/derivatives/taker_long_short_vol_ratio', {tf: '1d'}),
+  S('vol_compra', '/btc/derivatives/buy_volume', {tf: '1d'}),
+  S('vol_venda', '/btc/derivatives/sell_volume', {tf: '1d'}),
+  S('fear_greed', '/crypto_fear_and_greed/sentiment', {desde: '2018-02-01', campo: 'value'}),
+  S('altseason', '/btc/spot/altseason', {desde: '2021-01-01', alt: true, tf: '1d'}),
+  ...[['dxy','dxy'],['sp500','sp500'],['vix','vixcls'],['ouro','gold'],['tbill','yield_3m'],['juros_10y','yield_10y'],['m2_global','m2_money_supply_global'],['nasdaq','nasdaq'],['curva_10_2','t10y2y'],['hy_spread','bamlh0a0hym2']]
+    .map(([ind, c]) => S(ind, '/' + c + '/macro', {desde: '2020-01-01', campo: 'value'})),
+  ...['cryptocurrency','bitcoin','doge','ethereum','xrp','solana','cardano','chainlink','litecoin','hyperliquid','binance','coinbase','bybit','okx','coinmarketcap','coingecko']
+    .map(k => S('g_' + k, '/google_' + k + '/sentiment', {desde: '2011-01-01', cada: 7, campo: 'value'}))
+];
+const desser = s => (s || '').split(';').filter(Boolean).map(x => { const i = x.indexOf(','); return [x.slice(0, i), Number(x.slice(i + 1))]; }).filter(p => p[0].length === 10 && isFinite(p[1]));
+const ser = pts => pts.map(p => p[0] + ',' + (+p[1].toPrecision(7))).join(';');
+const menosDias = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') - n*864e5).toISOString().slice(0, 10);
+const valor = (it, b) => { if (b.campo && it[b.campo] != null) return +it[b.campo]; const k = Object.keys(it).find(k => k !== 'time' && typeof it[k] === 'number'); return k ? +it[k] : NaN; };
+const camel = o => Array.isArray(o) ? o.map(camel) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k.replace(/_([a-z0-9])/g, (m, c) => c.toUpperCase()), camel(v)])) : o;
+// mapa de liquidações: transforma a grade de preços em níveis (os 24 maiores, como no painel)
+function niveisLiq(sn){
+  const pm = sn.priceMid || [], L = sn.activeLongLiqUsd || [], Sh = sn.activeShortLiqUsd || [], pr = +sn.lastClose, out = [];
+  pm.forEach((p, i) => { const l = p < pr ? +L[i] || 0 : 0, s = p > pr ? +Sh[i] || 0 : 0; if (l > 0 || s > 0) out.push({p: +p, l, s}); });
+  out.sort((a, b) => Math.max(b.l, b.s) - Math.max(a.l, a.s));
+  const top = out.slice(0, 24).sort((a, b) => b.p - a.p);
+  if (!top.length) return null;
+  return {data: String(sn.lastBucketTime || '').slice(0, 10), t: sn.lastBucketTime || new Date().toISOString(), tf: sn.timeframe, preco: pr || null, niveis: top};
+}
+const PER = {'7d': {tf: '15m', tfV: '1h', dias: 7}, '30d': {tf: '30m', tfV: '1h', dias: 30}, '90d': {tf: '4h', tfV: '4h', dias: 90}, '365d': {tf: '1d', tfV: '1d', dias: 365}};
+async function velas(tfV, dias){
+  const r = await ax('/btc/spot/OHLCV', {timeframe: tfV, startDate: new Date(Date.now() - dias*864e5).toISOString()});
+  const pts = (Array.isArray(r) ? r : []).map(x => [Date.parse(x.time), +x.open, +x.high, +x.low, +x.close]).filter(x => x.every(isFinite)).sort((a, b) => a[0] - b[0]);
+  return pts.length ? {tf: tfV, pts: pts.map(x => x.map((v, i) => i ? +v.toFixed(2) : v).join(',')).join(';')} : null;
+}
 async function alphractal(){
-  if (!process.env.ALPHRACTAL_API_KEY || !process.env.ALPHRACTAL_API_URL) return 'sem ALPHRACTAL_API_KEY/URL, pulado';
-  return 'ainda não implementado';
+  if (!process.env.ALPHRACTAL_API_KEY) return 'sem ALPHRACTAL_API_KEY, pulado';
+  const series = ler('series'), mercado = ler('mercado'), hoje = agoraBR().data;
+  const meta = mercado.meta || {}; meta.buscas = meta.buscas || {}; meta.hist = meta.hist || {};
+  let ok = 0, chamadas = 0; const falhas = [];
+  for (const b of BUSCAS){
+    const ult = meta.buscas[b.ind];
+    if (ult && (b.cada ? (Date.parse(hoje) - Date.parse(ult))/864e5 < b.cada : ult === hoje)) continue;
+    const atual = desser(series[b.ind] && series[b.ind].pts), ini = atual.length ? menosDias(atual[atual.length-1][0], 3) : (b.desde || menosDias(hoje, 730));
+    try {
+      chamadas++;
+      let r = await ax(b.cam, {startDate: ini + 'T00:00:00Z', endDate: hoje + 'T23:59:59Z', timeframe: b.tf});
+      if (b.alt) r = (r && r.series) || [];
+      const m = new Map(atual); let n = 0;
+      for (const it of (Array.isArray(r) ? r : [])){ const d = String(it.time || '').slice(0, 10), v = (b.alt ? +it.seasonIndex : valor(it, b)) * (b.fator || 1); if (d.length === 10 && isFinite(v)){ m.set(d, v); n++; } }
+      if (n){ series[b.ind] = {pts: ser([...m.entries()].sort((a, c) => a[0] < c[0] ? -1 : 1))}; ok++; }
+      meta.buscas[b.ind] = hoje;
+    } catch (e){ falhas.push(b.ind + ' (' + e.message + ')'); }
+  }
+  gravar('series', series);
+  // resumo do mercado (preço, OI, long/short, liquidações 24h)
+  try { chamadas++; const r = camel(await ax('/summary/btc')); if (r && r.priceUsd){ mercado.resumo = {...(mercado.resumo || {}), ...r}; delete mercado.resumo.liqJanelas; } }
+  catch (e){ falhas.push('resumo (' + e.message + ')'); }
+  // mapa de liquidações nos 4 períodos + candles
+  for (const [per, c] of Object.entries(PER)){
+    try {
+      chamadas += 2;
+      const liq = niveisLiq(await ax('/liquidation_levels/snapshot', {asset: 'btc', timeframe: c.tf})), v = await velas(c.tfV, c.dias);
+      if (!liq) throw new Error('sem níveis');
+      if (per === '30d'){
+        mercado.liquidacoes = liq; if (v) mercado.velas = v;
+        const h = (mercado.liq_hist && mercado.liq_hist.snaps) || [], s = {t: liq.t, preco: liq.preco, n: liq.niveis.map(x => [Math.round(x.p), Math.round(x.l), Math.round(x.s)].join(',')).join(';')};
+        const u = h[h.length-1]; if (u && Math.abs(Date.parse(liq.t) - Date.parse(u.t)) < 3*3600e3) h[h.length-1] = s; else h.push(s);
+        mercado.liq_hist = {snaps: h.slice(-120)};
+      } else mercado['mapa_' + per] = {liq, velas: v};
+    } catch (e){ falhas.push('mapa ' + per + ' (' + e.message + ')'); }
+  }
+  mercado.meta = {...meta, atualizado: new Date().toISOString()};
+  gravar('mercado', mercado);
+  return ok + ' séries atualizadas, ' + chamadas + ' chamadas (~' + chamadas*10 + ' créditos)' + (falhas.length ? '; falharam: ' + falhas.join('; ') : '');
 }
 
 await parte('Pools', pools);
