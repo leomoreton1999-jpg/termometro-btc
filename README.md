@@ -5,3 +5,5 @@ Site estático. A página (`index.html`) lê os arquivos de `data/`, que o robô
 - `fonte-dados.js`: camada que lê `data/<collection>.json` (um objeto `{id: documento}` por arquivo).
 - `data/`: carga inicial exportada do painel antigo em 11/11/2026.
 - Chaves de API só em GitHub Secrets, nunca no código.
+
+Site: publicado pela Vercel a cada commit em `main` (repositório público; chaves só nos Secrets do GitHub).
