@@ -602,7 +602,7 @@ body.com-maxi{overflow:hidden}
 .mud.tem{border-color:rgba(34,211,238,.5);background:linear-gradient(90deg,rgba(34,211,238,.1),var(--papel2) 60%)}
 .mud-it b{font-weight:700}
 .tv-moedas{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.tv-moedas button{font-size:12.5px;padding:6px 12px;font-weight:600}.tv-moedas button.on{background:var(--tinta);border-color:var(--tinta);color:var(--papel)}
-.tv-box{padding:0;overflow:hidden}.tv-graf{height:max(560px, calc(100vh - 230px));width:100%}.tv-graf .tradingview-widget-container{height:100%;width:100%}
+.tv-box{padding:0;overflow:hidden}.maxi.tv-box{display:flex;flex-direction:column}.maxi .tv-graf{flex:1;height:auto;min-height:0}.tv-graf{height:max(560px, calc(100vh - 230px));width:100%}.tv-graf .tradingview-widget-container{height:100%;width:100%}
 @media (max-width:640px){.tv-graf{height:max(520px, calc(100vh - 200px))}}
 .nt-lang{display:inline-flex;margin:0 0 12px}.nt-lang button{font-size:13px;padding:7px 14px}.nt-lang .nt-n{opacity:.7;margin-left:4px}
 /* notícias */
@@ -1196,7 +1196,7 @@ footer.legal{letter-spacing:.01em}
 <section id="tvAba" data-aba="tv">
   <div class="sec-cab"><span class="sec-tag">TRADINGVIEW</span><h2>Gráfico avançado</h2></div>
   <div class="tv-moedas" id="tvMoedas" role="group" aria-label="Moeda do gráfico"></div>
-  <div class="card tv-box"><div id="tvGraf" class="tv-graf"><p class="vazio">Carregando o gráfico do TradingView…</p></div></div>
+  <div class="fut tv-box" id="w_tv"><div class="fut-cab"><div class="fut-tit"><span class="fut-btc"><i></i>TV</span><span id="tvNome">Gráfico avançado</span></div></div><div id="tvGraf" class="tv-graf"><p class="vazio">Carregando o gráfico do TradingView…</p></div></div>
   <p class="fonte-sec">Gráfico e dados do TradingView, ao vivo. Já abre com médias móveis (EMA 21 e 200), Bandas de Bollinger, volume, RSI e MACD; use o botão de indicadores do gráfico para tirar ou pôr outros, e a busca no canto superior esquerdo para qualquer outro ativo. Desenhos ficam só no seu navegador.</p>
 </section>
 
@@ -4493,6 +4493,7 @@ function lsGetSeguro(k, d){ try { return localStorage.getItem(k) || d; } catch(e
 function tvAbre(forcar){
   const el = $('#tvGraf'); if (!el) return;
   $('#tvMoedas').innerHTML = TV_MOEDAS.map(([n, s]) => `<button type="button" data-tv="${s}" class="${s === TV_SIM ? 'on' : ''}" aria-pressed="${s === TV_SIM}">${n}</button>`).join('');
+  { const n = TV_MOEDAS.find(m => m[1] === TV_SIM); $('#tvNome').textContent = (n ? n[0] : TV_SIM.split(':').pop()) + ' · ' + TV_SIM.split(':')[0].toLowerCase().replace(/^./, c => c.toUpperCase()); }
   if (TV_FEITO === TV_SIM && !forcar) return; TV_FEITO = TV_SIM;
   const cfg = {autosize: true, symbol: TV_SIM, interval: 'D', timezone: 'America/Sao_Paulo', theme: 'dark', style: '1', locale: 'br', backgroundColor: '#111316', gridColor: 'rgba(255,255,255,0.05)',
     allow_symbol_change: true, hide_side_toolbar: false, withdateranges: true, details: false, calendar: false, hide_volume: false, save_image: true, support_host: 'https://www.tradingview.com',
