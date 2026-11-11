@@ -78,10 +78,16 @@ const tag = (x, t) => { const m = x.match(new RegExp('<' + t + '(?:\\s[^>]*)?>([
 const corta = (s, n) => s.length <= n ? s : s.slice(0, n).replace(/\s+\S*$/, '') + '…';
 // categorias e relevância por palavras-chave (sem IA)
 const CAT = [
-  ['macro', /\b(fed|fomc|powell|warsh|juros|rates?|inflação|inflation|cpi|ppi|pce|payroll|emprego|jobs|desemprego|unemployment|pib|gdp|dólar|dollar|dxy|treasur|tesouro|petróleo|oil|bolsas?|stocks?|nasdaq|s&p|tarifa|tariff|recess|bce|ecb|boj|banco central|central bank)\b/i],
-  ['inst', /\b(blackrock|fidelity|grayscale|vaneck|bitwise|ark|strategy|microstrategy|saylor|tesla|metaplanet|tesouraria|treasury compan|banco|bank|gestora|asset manager|jpmorgan|goldman|morgan stanley|citi|hsbc|visa|mastercard|paypal|coinbase|robinhood|sec|cftc|regula|lei|bill|congress|senado|senate|stablecoin|tokeniza|tokeniz)\w*/i],
-  ['onchain', /\b(etfs?|ibit|fbtc|fluxo|flows?|inflow|outflow|baleia|whale|on-chain|onchain|minera|miner|hashrate|liquida|liquidat|corretora|exchange|reserva|halving|funding|open interest)\w*/i]
+  ['onchain', /\b(etfs?|ibit|fbtc|fluxos?|flows?|inflows?|outflows?|entradas?|sa[ií]das?|baleias?|whales?|on-?chain|minera\w*|miners?|mining|hashrate|liquida\w*|corretoras?|exchanges?|reservas?|halving|funding|open interest|carteiras?|wallets?|hack\w*|exploit\w*|roubo|golpe|op[cç][oõ]es|options|derivativos|derivatives|pre[cç]o do bitcoin|bitcoin price|btc (sobe|cai|recua)|squeeze)\b/gi],
+  ['inst', /\b(blackrock|fidelity|grayscale|vaneck|bitwise|ark|strategy|microstrategy|saylor|tesla|metaplanet|tesouraria|treasur(y|ies) compan\w*|bancos?|banks?|gestoras?|asset managers?|jpmorgan|goldman|morgan stanley|citi|hsbc|deutsche|nomura|visa|mastercard|paypal|coinbase|kraken|robinhood|binance|empresas?|compan(y|ies)|tokeniza\w*|tokeniz\w*|stablecoins?|licen[cç]as?|license|ipo|lucro|receita|earnings|revenue|cust[oó]dia|custody)\b/gi],
+  ['macro', /\b(fed|fomc|powell|warsh|juros|rates?|infla[cç][aã]o|inflation|cpi|ppi|pce|payroll|emprego|jobs|desemprego|unemployment|pib|gdp|d[oó]lar|dollar|dxy|treasur(y|ies) (yield|bond)s?|tesouro|petr[oó]leo|oil|bolsas?|stocks?|nasdaq|s&p|tarifas?|tariffs?|recess\w*|bce|ecb|boj|banco central|central bank|sec|cftc|regula\w*|lei|bill|congress\w*|senado|senate|trump|white house|casa branca|judge|juiz|tribunal|court)\b/gi]
 ];
+// categoria = a que tiver mais palavras-chave no título (peso 2) e no resumo (peso 1); empate: on-chain, depois institucional
+function categoria(titulo, resumo){
+  let melhor = ['inst', 0];
+  for (const [c, re] of CAT){ const n = 2*(String(titulo).match(re) || []).length + (String(resumo).match(re) || []).length; if (n > melhor[1]) melhor = [c, n]; }
+  return melhor[0];
+}
 const PESO = /\b(etf|fed|fomc|powell|sec|cpi|inflação|inflation|juros|rates|hack|halving|blackrock|strategy|payroll|liquida\w*|liquidation\w*|recorde|record|máxima|all-time high|ath)\b/gi;
 const BTC = /\b(bitcoin|btc)\b/i;
 const slug = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70);
@@ -98,7 +104,7 @@ async function noticias(){
       if (isNaN(quando)) continue;
       const data = new Date(quando.getTime() - 3*3600e3).toISOString().slice(0, 10);
       const resumo = corta(limpa(tag(it, 'description')), 420);
-      const txt = titulo + ' ' + resumo, cat = (CAT.find(([, re]) => re.test(txt)) || ['macro'])[0];
+      const txt = titulo + ' ' + resumo, cat = categoria(titulo, resumo);
       novos.push({titulo, resumo, cat, fonte: F.fonte, lang: F.lang, url, data, _txt: txt.toLowerCase(), _peso: (txt.match(PESO) || []).length + (BTC.test(txt) ? 1 : 0)});
     }
   }
