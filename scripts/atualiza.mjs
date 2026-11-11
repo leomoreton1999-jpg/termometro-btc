@@ -208,11 +208,9 @@ const valor = (it, b) => { if (b.campo && it[b.campo] != null) return +it[b.camp
 const camel = o => Array.isArray(o) ? o.map(camel) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k.replace(/_([a-z0-9])/g, (m, c) => c.toUpperCase()), camel(v)])) : o;
 // mapa de liquidações: transforma a grade de preços em níveis (os 24 maiores, como no painel)
 function niveisLiq(sn){
-  if (process.env.DEBUG_LIQ !== '0'){ try { const pm = sn.priceMid || [], pr = +sn.lastClose, st = (arr, f) => { const v = (arr || []).map((x, i) => [+pm[i], +x]).filter(f); return {n: v.length, nz: v.filter(x => x[1] !== 0).length, soma: v.reduce((a, x) => a + x[1], 0), min: Math.min(...v.map(x => x[1])), max: Math.max(...v.map(x => x[1]))}; };
-    const d = ler('_debug_liq'); d[sn.timeframe] = {lastClose: pr, bins: pm.length, pMin: Math.min(...pm), pMax: Math.max(...pm), chaves: Object.keys(sn),
-      longAbaixo: st(sn.activeLongLiqUsd, x => x[0] < pr), longAcima: st(sn.activeLongLiqUsd, x => x[0] > pr), shortAcima: st(sn.activeShortLiqUsd, x => x[0] > pr), shortAbaixo: st(sn.activeShortLiqUsd, x => x[0] < pr)}; gravar('_debug_liq', d); } catch (e){} }
   const pm = sn.priceMid || [], L = sn.activeLongLiqUsd || [], Sh = sn.activeShortLiqUsd || [], pr = +sn.lastClose, out = [];
-  pm.forEach((p, i) => { const l = p < pr ? +L[i] || 0 : 0, s = p > pr ? +Sh[i] || 0 : 0; if (l > 0 || s > 0) out.push({p: +p, l, s}); });
+  // a API manda a liquidez de cada faixa em activeLongLiqUsd (activeShortLiqUsd vem zerado): abaixo do preço é longs, acima é shorts
+  pm.forEach((p, i) => { const v = Math.max(+L[i] || 0, +Sh[i] || 0); if (!(v > 0)) return; out.push({p: +p, l: p < pr ? v : 0, s: p > pr ? v : 0}); });
   // os 12 maiores de cada lado: longs (abaixo do preço) e shorts (acima). Pegar os 24 maiores juntos deixava só longs.
   const lado = k => out.filter(n => n[k] > 0).sort((a, b) => b[k] - a[k]).slice(0, 12);
   const top = lado('l').concat(lado('s')).sort((a, b) => b.p - a.p);
