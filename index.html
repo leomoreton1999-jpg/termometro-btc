@@ -1010,6 +1010,7 @@ footer.legal{letter-spacing:.01em}
 .conclusao .cc-st{gap:8px}
 .conclusao .cc-st .bt-card + .bt-card{margin-left:0}
 .preco .val,.kpi b,.cartao .v,.le-big,.le-duo b,.ef-big,.ex-v b,.termo .nota-g,.li-big,.cc-rot,.ar-st,.fut-val,.sr b{font-variant-numeric:normal;font-feature-settings:"tnum" 0}
+.fut-ex{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--cinza)}.fut-ex select{background:var(--papel2);color:var(--tinta);border:1px solid var(--regua2);border-radius:var(--raio);padding:4px 6px;font:inherit;font-size:12px}
 </style>
 </head>
 <body>
@@ -1075,6 +1076,11 @@ footer.legal{letter-spacing:.01em}
 <section data-av id="liqEtf">
   <div class="sec-cab"><span class="sec-tag">FLUXO DO DIA</span><h2>Liquidações e ETFs</h2></div>
   <div class="le-grade"><div class="card le" id="cLiq24"></div><div class="card le" id="cEtf"></div></div>
+</section>
+
+<section id="mercSopr">
+  <div class="sec-cab"><span class="sec-tag">ON-CHAIN</span><h2>SOPR: o mercado está vendendo no lucro ou no prejuízo?</h2></div>
+  <div class="fut-grade" id="mercGrade"></div>
 </section>
 
 
@@ -3957,6 +3963,12 @@ document.addEventListener('click', ev => { const a = ev.target.closest('a[data-g
 const FUT_PER = [['7','7d'],['30','30d'],['90','90d'],['ytd','YTD'],['365','1a'],['0','Tudo']];
 function fmtK(v){ return v >= 1e6 ? fmtNum(v/1e6, 2) + 'M' : v >= 1e3 ? fmtNum(v/1e3, v >= 1e5 ? 0 : 1) + 'K' : fmtNum(v, v >= 1 ? 0 : v >= 0.1 ? 1 : 2); }
 const FUT_COR = {pos:'#16c784', neg:'#ea3943', btc:'#f7931a', preco:'#ffffff'};
+// Whale vs Retail Delta por corretora (vazio = todas somadas); escolha lembrada neste navegador
+const WH_EXS = [['','Todas as corretoras'],['binance','Binance'],['bybit','Bybit'],['okx','OKX']];
+let WH_EX = ''; try { WH_EX = localStorage.getItem('ocp_wh_ex') || ''; } catch(e){}
+if (!WH_EXS.some(x => x[0] === WH_EX)) WH_EX = '';
+const whInd = () => WH_EX ? 'whale_delta_' + WH_EX : 'whale_delta';
+const exBar = c => c.ex ? `<label class="fut-ex">Corretora<select data-ex="${c.id}">${WH_EXS.map(([k, n]) => `<option value="${k}"${k === WH_EX ? ' selected' : ''}>${n}</option>`).join('')}</select></label>` : '';
 function oiBtc(){
   const oi = serie('oi_usd'), p = serie('btc_preco'); if (!oi || !p) return null;
   const mp = new Map(p), out = [];
@@ -3973,8 +3985,8 @@ const FUT = [
     ler:(u, s) => { const v = varPct(s, 30); return v == null ? 'Contratos abertos medidos em BTC, sem o efeito do preço.' : `Contratos abertos em BTC <b>${sinal(v,1,'%')}</b> em 30 dias: ${v > 5 ? 'alavancagem crescendo.' : v < -5 ? 'alavancagem saindo do mercado.' : 'alavancagem estável.'}`; }},
   {id:'fOi', tit:'Open interest em dólar (USD)', ind:'oi_usd', tipo:'area', cor:FUT_COR.btc, leg:[['lin',FUT_COR.btc,'Open interest [USD]']], fmt:v=>'$'+fmtNum(v/1e9,2)+' bi', fmtE:v=>fmtEixo(v), per:'0',
     ler:(u, s) => { const v = varPct(s, 30); return `Total em contratos abertos: <b>$${fmtNum(u[1]/1e9,1)} bi</b>` + (v == null ? '.' : `, ${sinal(v,1,'%')} em 30 dias.`); }},
-  {id:'fWhale', tit:'Whale vs Retail Delta', ind:'whale_delta', tipo:'barra', leg:[['lin',FUT_COR.pos,'Baleias vs. varejo (delta)']], fmt:v=>sinal(v,3), fmtE:v=>fmtNum(v, 2), per:'0',
-    ler:(u) => `Hoje <b>${sinal(u[1],2)}</b>: ${u[1] > 0 ? 'baleias mais compradas que o varejo.' : 'baleias menos compradas que o varejo.'} Verde = baleias à frente; vermelho = varejo à frente.`},
+  {id:'fWhale', tit:'Whale vs Retail Delta', ind:'whale_delta', calc:() => serie(whInd()), ex:1, tipo:'barra', leg:[['lin',FUT_COR.pos,'Baleias vs. varejo (delta)']], fmt:v=>sinal(v,3), fmtE:v=>fmtNum(v, 2), per:'0',
+    ler:(u) => `Hoje <b>${sinal(u[1],2)}</b>: ${u[1] > 0 ? 'baleias mais compradas que o varejo.' : 'baleias menos compradas que o varejo.'} Verde = baleias à frente; vermelho = varejo à frente. Dados: ${esc(WH_EXS.find(x => x[0] === WH_EX)[1].replace('Todas', 'todas'))}.`},
   {id:'fTop', tit:'Top Trader Long/Short Ratio (posições)', ind:'toptrader', tipo:'linha', duasCores:1, cor:FUT_COR.pos, leg:[['lin',FUT_COR.pos,'Acima de 1 · mais comprados'],['lin',FUT_COR.neg,'Abaixo de 1 · mais vendidos']], fmt:v=>fmtNum(v,2), fmtE:v=>fmtNum(v,2), per:'0', ref:1,
     ler:(u) => `Hoje <b>${fmtNum(u[1],2)}</b>: ${u[1] >= 1 ? 'os maiores traders estão mais comprados que vendidos.' : 'os maiores traders estão mais vendidos que comprados.'}`}
 ];
@@ -4185,7 +4197,11 @@ const ONC_CIC = [
 ];
 function drawdownAth(){ const s = serie('btc_preco'); if (!s || s.length < 2) return null; let mx = 0; return s.filter(p => p[1] > 0).map(p => { mx = Math.max(mx, p[1]); return [p[0], (p[1]/mx - 1)*100]; }); }
 function googleTotal(){ const m = new Map(); GOOGLE.forEach(([k]) => (serie('g_' + k) || []).forEach(([d, v]) => m.set(d, (m.get(d) || 0) + (+v || 0)))); const t = [...m.entries()].sort((a,b) => a[0] < b[0] ? -1 : 1); return t.length ? t : null; }
-const PAINEIS_EXTRA = {onchain: [{el:'#oncFluGrade', lista:ONC_FLU, placar:'#oncFluPlacar', rot:['FLUXO COMPRADOR','FLUXO VENDEDOR','FLUXO NEUTRO']}, {el:'#oncCicGrade', lista:ONC_CIC}]};
+const MERC = [
+  {id:'mSopr', tit:'SOPR (Spent Output Profit Ratio)', ind:'sopr', tipo:'linha', duasCores:1, ref:1, cor:FUT_COR.pos, leg:[['lin',FUT_COR.pos,'Acima de 1 · vendendo no lucro'],['lin',FUT_COR.neg,'Abaixo de 1 · vendendo no prejuízo']], fmt:v=>fmtNum(v,3), fmtE:v=>fmtNum(v,3), per:'365',
+    ler:(u, s) => { const m7 = media(s.slice(-7).map(p=>p[1])); return `Hoje <b>${fmtNum(u[1],3)}</b>, média de 7 dias <b>${fmtNum(m7,3)}</b>: ${m7 >= 1 ? 'quem movimenta BTC está, em média, realizando lucro.' : 'quem movimenta BTC está, em média, vendendo no prejuízo (capitulação).'} Em alta, o 1 costuma funcionar como suporte; em baixa, como resistência. Períodos longos abaixo de 1 marcaram fundos.`; }}
+];
+const PAINEIS_EXTRA = {hoje: [{el:'#mercGrade', lista:MERC}], onchain: [{el:'#oncFluGrade', lista:ONC_FLU, placar:'#oncFluPlacar', rot:['FLUXO COMPRADOR','FLUXO VENDEDOR','FLUXO NEUTRO']}, {el:'#oncCicGrade', lista:ONC_CIC}]};
 const PAINEIS = {
   etfs: {el:'#etfGrade', lista:ETF_L},
   onchain: {el:'#oncGrade', lista:ONC, mais:ONC_CIC, placar:'#oncPlacar', rot:['ON-CHAIN FAVORÁVEL','ON-CHAIN DESFAVORÁVEL','ON-CHAIN NEUTRO'], fonte:'#fs_onc'},
@@ -4213,7 +4229,7 @@ function mmBar(c, id){ if (!temMM(c)) return ''; return MM_DEF.map(([n, cor]) =>
 const tipoDe = c => temTipo(c) ? (TIPO_G[c.id] || c.tipo) : c.tipo;
 function tpBar(c, id){ if (!temTipo(c)) return ''; const t = tipoDe({...c, id}); return `<div class="fut-tp" data-tp="${id}" role="group" aria-label="Tipo de gráfico">${[['linha','Linha'],['area','Área']].map(([k,n]) => `<button type="button" data-v="${k}" class="${t === k ? 'on' : ''}">${n}</button>`).join('')}</div>`; }
 const serOff = (id, k) => !!(SER_OFF[id] && SER_OFF[id][k]);
-const FUTS = {}; Object.values(PAINEIS).forEach(P => P.lista.forEach(c => FUTS[c.id] = c.per)); ONC_FLU.concat(ONC_CIC).forEach(c => FUTS[c.id] = c.per);
+const FUTS = {}; Object.values(PAINEIS).forEach(P => P.lista.forEach(c => FUTS[c.id] = c.per)); ONC_FLU.concat(ONC_CIC, MERC).forEach(c => FUTS[c.id] = c.per);
 const TAG_E = {ajuda:['AJUDA O BTC','oport'], contra:['PESA CONTRA','alerta'], neutro:['NEUTRO','atencao']};
 function futCorte(per, ult){ if (per === '0') return null; if (per === 'ytd') return ult.slice(0,4) + '-01-01'; return menosDias(ult, +per); }
 function placarDe(aba){
@@ -4252,7 +4268,7 @@ function desenhaPainel(P, el, principal){
   const sinais = P.lista.map(c => { try { return c.sinal ? c.sinal() : null; } catch(e){ return null; } });
   el.innerHTML = P.lista.map((c, i) => { const sg = sinais[i]; if (c.soPlacar) return '';
     return `<div class="fut${MAXI === 'w_' + c.id ? ' maxi' : ''}" id="w_${c.id}"><div class="fut-cab"><div class="fut-tit"><span class="fut-btc"><i></i>BTC</span><span>${esc(c.tit)}</span>${baseBt(c)}${(v => v ? `<span class="fut-val" style="color:${v.cor}" title="Último valor, ${fmtData(v.d)}">${esc(v.t)}<small>${fmtData(v.d).slice(0,5)}</small></span>` : '')(valorFut(c))}</div>
-    <div class="fut-dir">${tpBar(c, c.id)}${corBarHtml(c, c.id)}<div class="fut-per" data-fut="${c.id}" role="group" aria-label="Período">${FUT_PER.map(([k,n]) => `<button type="button" data-p="${k}" class="${FUTS[c.id] === k ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>
+    <div class="fut-dir">${exBar(c)}${tpBar(c, c.id)}${corBarHtml(c, c.id)}<div class="fut-per" data-fut="${c.id}" role="group" aria-label="Período">${FUT_PER.map(([k,n]) => `<button type="button" data-p="${k}" class="${FUTS[c.id] === k ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>
     <div class="fut-leg">${c.leg.map(([t,cor,n], k) => `<button type="button" class="fut-preco fut-lg" data-fut="${c.id}" data-k="${k}" aria-pressed="${!serOff(c.id, k)}"><i class="${t === 'bar' ? 'bar' : ''}" style="background:${temTipo(c) ? corLeg(c.id, k, cor) : cor}"></i>${esc(n)}</button>`).join('')}<button type="button" class="fut-preco" data-fut="${c.id}" aria-pressed="${!PRECO_OFF[c.id]}"><i style="background:#fff"></i>Preço do BTC</button>${mmBar(c, c.id)}</div>
     <div class="fut-graf" id="${c.id}"></div><p class="fut-ler" id="l_${c.id}"></p></div>`; }).join('');
   if (P.placar){
@@ -4446,16 +4462,16 @@ function desenhaFut(c){
 document.addEventListener('click', ev => {
   const bl = ev.target.closest('.fut-lg'); if (!bl) return;
   const id = bl.dataset.fut, k = +bl.dataset.k; SER_OFF[id] = SER_OFF[id] || {}; SER_OFF[id][k] = !SER_OFF[id][k]; bl.setAttribute('aria-pressed', String(!SER_OFF[id][k]));
-  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
+  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, MERC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
 });
 document.addEventListener('click', ev => {
   const bp = ev.target.closest('.fut-preco:not(.fut-lg)'); if (!bp) return;
   const id = bp.dataset.fut; PRECO_OFF[id] = !PRECO_OFF[id]; bp.setAttribute('aria-pressed', String(!PRECO_OFF[id]));
-  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
+  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, MERC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
 });
 function aplicaCor(id, cor){
   if (cor) COR_G[id] = cor; else delete COR_G[id]; try { localStorage.setItem('ocp_cor_g', JSON.stringify(COR_G)); } catch(e){}
-  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (!c) return;
+  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, MERC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (!c) return;
   const w = document.getElementById('w_' + id) || document.getElementById(id).closest('.fut'), base = cor || c.cor || '#16c784';
   if (w){ const li = w.querySelector('.fut-lg[data-k="0"] i'); if (li) li.style.background = base; const sm = w.querySelector('.fut-cor summary i'); if (sm) sm.style.background = base;
     w.querySelectorAll('.cor-pop [data-corv]').forEach(b => b.classList.toggle('on', !!cor && b.dataset.corv === cor)); }
@@ -4471,23 +4487,23 @@ document.addEventListener('click', ev => {
   const bm = ev.target.closest('.fut-mm'); if (!bm) return;
   const id = bm.dataset.mm, n = bm.dataset.n; MM_G[id] = MM_G[id] || {}; MM_G[id][n] = !MM_G[id][n]; try { localStorage.setItem('ocp_mm_g', JSON.stringify(MM_G)); } catch(e){}
   const cor = (MM_DEF.find(x => String(x[0]) === n) || [])[1]; bm.setAttribute('aria-pressed', String(MM_G[id][n])); bm.style.color = MM_G[id][n] ? cor : ''; bm.style.borderColor = MM_G[id][n] ? cor : '';
-  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
+  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, MERC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
 });
 document.addEventListener('click', ev => {
   const bt = ev.target.closest('.fut-tp button'); if (!bt) return;
   const id = bt.parentElement.dataset.tp; TIPO_G[id] = bt.dataset.v; try { localStorage.setItem('ocp_tipo_g', JSON.stringify(TIPO_G)); } catch(e){}
   bt.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === bt));
-  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
+  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, MERC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
 });
 document.addEventListener('click', ev => {
   const bt = ev.target.closest('.fut-per button'); if (!bt) return;
   const id = bt.parentElement.dataset.fut; FUTS[id] = bt.dataset.p; ZOOM[id] = null;
   bt.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === bt));
-  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
+  const c = Object.values(PAINEIS).flatMap(P => P.lista).concat(ONC_FLU, ONC_CIC, MERC, Object.values(EXTRA_FUT)).find(x => x.id === id); if (c) desenhaFut(c);
 });
 
 /* ================= TRADINGVIEW (widget gratuito, carrega só quando a aba abre) ================= */
-const TV_MOEDAS = [['BTC','BINANCE:BTCUSDT','Bitcoin'],['ETH','BINANCE:ETHUSDT','Ethereum'],['SOL','BINANCE:SOLUSDT','Solana'],['MSTR','NASDAQ:MSTR','Strategy'],['HYPE','BYBIT:HYPEUSDT','Hyperliquid'],['AAVE','BINANCE:AAVEUSDT','Aave'],['PENDLE','BINANCE:PENDLEUSDT','Pendle'],['SYRUP','BINANCE:SYRUPUSDT','Maple (Syrup)'],['LIT','BYBIT:LITUSDT','Lighter'],['COIN','NASDAQ:COIN','Coinbase'],['OURO','OANDA:XAUUSD','Ouro (XAU/USD)'],['S&P 500','OANDA:SPX500USD','S&P 500']];
+const TV_MOEDAS = [['BTC','BINANCE:BTCUSDT','Bitcoin'],['ETH','BINANCE:ETHUSDT','Ethereum'],['SOL','BINANCE:SOLUSDT','Solana'],['MSTR','NASDAQ:MSTR','Strategy'],['HYPE','BYBIT:HYPEUSDT','Hyperliquid'],['AAVE','BINANCE:AAVEUSDT','Aave'],['PENDLE','BINANCE:PENDLEUSDT','Pendle'],['SYRUP','BINANCE:SYRUPUSDT','Maple (Syrup)'],['LIT','BYBIT:LITUSDT','Lighter'],['COIN','NASDAQ:COIN','Coinbase'],['OURO','OANDA:XAUUSD','Ouro (XAU/USD)'],['S&P 500','OANDA:SPX500USD','S&P 500'],['DÓLAR','BINANCE:USDCBRL','USDC/BRL']];
 let TV_SIM = lsGetSeguro('ocp_tv_sim', 'BINANCE:BTCUSDT'), TV_FEITO = '';
 if (TV_SIM === 'COINBASE:LITUSD') TV_SIM = 'BYBIT:LITUSDT';
 if (!TV_MOEDAS.some(m => m[1] === TV_SIM)) TV_SIM = 'BINANCE:BTCUSDT';
@@ -4505,6 +4521,7 @@ function tvAbre(forcar){
   s.textContent = JSON.stringify(cfg); s.onerror = () => { el.innerHTML = '<p class="vazio">Não foi possível carregar o TradingView agora. Confira a internet e abra a aba de novo.</p>'; TV_FEITO = ''; };
   el.querySelector('.tradingview-widget-container').appendChild(s);
 }
+document.addEventListener('change', ev => { const s = ev.target.closest('select[data-ex]'); if (!s) return; WH_EX = s.value; try { localStorage.setItem('ocp_wh_ex', WH_EX); } catch(e){} ZOOM[s.dataset.ex] = null; futuros(); });
 document.addEventListener('click', ev => { const b = ev.target.closest('#tvMoedas [data-tv]'); if (!b) return; TV_SIM = b.dataset.tv; try { localStorage.setItem('ocp_tv_sim', TV_SIM); } catch(e){} tvAbre(); });
 
 /* ================= ABAS ================= */
@@ -4546,6 +4563,7 @@ const CATALOGO = [
   {g:'On-chain', ind:'alpha_price', nome:'Preço Alpha', fmt:v=>'$'+fmtNum(v,0), dica:'Modelo de João Wedson que funciona como teto teórico de valuation.'},
   {g:'On-chain', ind:'lth_supply_in_profit_pct', nome:'LTH: % da oferta no lucro', fmt:v=>fmtNum(v*100,1)+'%', dica:'Parte da oferta dos holders de longo prazo que está no lucro.'},
   {g:'On-chain', ind:'sth_supply_in_profit_pct', nome:'STH: % da oferta no lucro', fmt:v=>fmtNum(v*100,1)+'%', dica:'Parte da oferta dos holders de curto prazo que está no lucro.'},
+  {g:'On-chain', ind:'sopr', nome:'SOPR', fmt:v=>fmtNum(v,3), ref:1, dica:'Preço de venda ÷ preço de compra das moedas movimentadas no dia. Acima de 1 = vendendo no lucro; abaixo de 1 = vendendo no prejuízo.'},
   {g:'On-chain', ind:'reserva', nome:'BTC nas corretoras', fmt:v=>fmtNum(v/1e6,3)+' mi BTC', dica:DICAS['BTC nas corretoras']},
   {g:'On-chain', ind:'netflow', dif:[0,' BTC'], nome:'Fluxo líquido nas corretoras', fmt:v=>sinal(v,0,' BTC'), barra:true, ref:0, dica:DICAS['Fluxo líquido nas corretoras']},
   {g:'On-chain', ind:'enderecos', nome:'Endereços ativos', fmt:v=>fmtNum(v,0), dica:DICAS['Endereços ativos']},

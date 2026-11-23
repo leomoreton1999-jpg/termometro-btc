@@ -191,11 +191,14 @@ const BUSCAS = [
   S('entrada_ex', '/btc/exchange_flow/FlowInExNtv'),
   S('saida_ex', '/btc/exchange_flow/FlowOutExNtv'),
   S('enderecos', '/btc/addresses/AdrActCnt'),
+  S('sopr', '/btc/lifespan/sopr', {desde: '2011-01-01'}),
   S('hashrate', '/btc/mining/HashRate', {fator: 1e-6}),
   S('funding', '/btc/derivatives/Funding_Rate', {fator: 100, desde: '2020-01-01', campo: 'value'}),
-  S('oi_usd', '/btc/derivatives/Open_Interest', {desde: '2020-01-01', campo: 'Open_Interest_Usd', tf: '1d'}),
+  S('oi_usd', '/btc/derivatives/open_interest', {desde: '2020-01-01', campo: 'open_Interest_Usd', tf: '1d'}),
   S('whale_ratio', '/btc/derivatives/whale_vs_retail_ratio', {tf: '1d'}),
   S('whale_delta', '/btc/derivatives/whale_vs_retail_delta', {desde: '2020-01-01', tf: '1d'}),
+  // o mesmo delta separado por corretora (seletor no gráfico do site)
+  ...['binance', 'bybit', 'okx'].map(ex => S('whale_delta_' + ex, '/btc/derivatives/whale_vs_retail_delta', {desde: '2020-01-01', tf: '1d', q: {exchange: ex}})),
   S('toptrader', '/btc/derivatives/toptrader_long_short_ratio', {desde: '2020-01-01', tf: '1d'}),
   S('taker', '/btc/derivatives/taker_long_short_vol_ratio', {tf: '1d'}),
   S('vol_compra', '/btc/derivatives/buy_volume', {tf: '1d'}),
@@ -210,7 +213,14 @@ const BUSCAS = [
 const desser = s => (s || '').split(';').filter(Boolean).map(x => { const i = x.indexOf(','); return [x.slice(0, i), Number(x.slice(i + 1))]; }).filter(p => p[0].length === 10 && isFinite(p[1]));
 const ser = pts => pts.map(p => p[0] + ',' + (+p[1].toPrecision(7))).join(';');
 const menosDias = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') - n*864e5).toISOString().slice(0, 10);
-const valor = (it, b) => { if (b.campo && it[b.campo] != null) return +it[b.campo]; const k = Object.keys(it).find(k => k !== 'time' && typeof it[k] === 'number'); return k ? +it[k] : NaN; };
+const valor = (it, b) => {
+  if (b.campo){
+    if (it[b.campo] != null) return +it[b.campo];
+    const k = Object.keys(it).find(k => k.toLowerCase() === b.campo.toLowerCase()) || (/usd/i.test(b.campo) ? Object.keys(it).find(k => /usd/i.test(k) && typeof it[k] === 'number') : null);
+    return k ? +it[k] : NaN;   // campo pedido e não achado: não grava outro número no lugar
+  }
+  const k = Object.keys(it).find(k => k !== 'time' && typeof it[k] === 'number'); return k ? +it[k] : NaN;
+};
 const camel = o => Array.isArray(o) ? o.map(camel) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k.replace(/_([a-z0-9])/g, (m, c) => c.toUpperCase()), camel(v)])) : o;
 // mapa de liquidações: transforma a grade de preços em níveis (os 24 maiores, como no painel)
 function niveisLiq(sn){
@@ -237,14 +247,16 @@ async function alphractal(){
   for (const b of BUSCAS){
     const ult = meta.buscas[b.ind];
     if (ult && (b.cada ? (Date.parse(hoje) - Date.parse(ult))/864e5 < b.cada : ult === hoje)) continue;
-    const atual = desser(series[b.ind] && series[b.ind].pts), ini = atual.length ? menosDias(atual[atual.length-1][0], 3) : (b.desde || menosDias(hoje, 730));
+    // meta.refazer[ind] = data: busca de novo a partir dessa data (corrige trechos gravados errados)
+    const refaz = meta.refazer && meta.refazer[b.ind];
+    const atual = desser(series[b.ind] && series[b.ind].pts), ini = refaz || (atual.length ? menosDias(atual[atual.length-1][0], 3) : (b.desde || menosDias(hoje, 730)));
     try {
       chamadas++;
-      let r = await ax(b.cam, {startDate: ini + 'T00:00:00Z', endDate: hoje + 'T23:59:59Z', timeframe: b.tf});
+      let r = await ax(b.cam, {startDate: ini + 'T00:00:00Z', endDate: hoje + 'T23:59:59Z', timeframe: b.tf, ...(b.q || {})});
       if (b.alt) r = (r && r.series) || [];
       const m = new Map(atual); let n = 0;
       for (const it of (Array.isArray(r) ? r : [])){ const d = String(it.time || '').slice(0, 10), v = (b.alt ? +it.seasonIndex : valor(it, b)) * (b.fator || 1); if (d.length === 10 && isFinite(v)){ m.set(d, v); n++; } }
-      if (n){ series[b.ind] = {pts: ser([...m.entries()].sort((a, c) => a[0] < c[0] ? -1 : 1))}; ok++; }
+      if (n){ series[b.ind] = {pts: ser([...m.entries()].sort((a, c) => a[0] < c[0] ? -1 : 1))}; ok++; if (refaz) delete meta.refazer[b.ind]; }
       meta.buscas[b.ind] = hoje;
     } catch (e){ falhas.push(b.ind + ' (' + e.message + ')'); }
   }
