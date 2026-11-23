@@ -1078,10 +1078,6 @@ footer.legal{letter-spacing:.01em}
   <div class="le-grade"><div class="card le" id="cLiq24"></div><div class="card le" id="cEtf"></div></div>
 </section>
 
-<section id="mercSopr">
-  <div class="sec-cab"><span class="sec-tag">ON-CHAIN</span><h2>SOPR: o mercado está vendendo no lucro ou no prejuízo?</h2></div>
-  <div class="fut-grade" id="mercGrade"></div>
-</section>
 
 
 
@@ -4063,13 +4059,15 @@ function netflowUsd(){ const n = serie('netflow'), p = serie('btc_preco'); if (!
 const LARANJA = '#f7931a', fmtUsdS = v => (v < 0 ? '−' : '+') + '$' + (Math.abs(v) >= 1e9 ? fmtNum(Math.abs(v)/1e9,2) + ' bi' : fmtNum(Math.abs(v)/1e6,1) + ' mi');
 function saldoCompraVenda(){ const b = diasFechados(serie('vol_compra')), s = serie('vol_venda'); if (!b || !s) return null; const sm = new Map(s); const o = b.filter(x => sm.has(x[0])).map(x => [x[0], x[1] - sm.get(x[0])]); return o.length > 1 ? o : null; }
 const ONC_FLU = [
-  {id:'oSaldo', sinal:() => FLU.find(x => x.id === 'xVol').sinal(), peso:FLU.find(x => x.id === 'xVol').peso, tit:'Saldo de compra e venda a mercado (Volume Coin)', calc:saldoCompraVenda, tipo:'barra', leg:[['bar',FUT_COR.pos,'Compradores dominaram'],['bar',FUT_COR.neg,'Vendedores dominaram']], fmt:fmtUsdS, fmtE:v => (v < 0 ? '-' : '') + '$' + fmtEixo(Math.abs(v)), per:'90',
+  {id:'oSaldo', sinal:() => FLU.find(x => x.id === 'xVol').sinal(), peso:FLU.find(x => x.id === 'xVol').peso, tit:'Saldo de compra e venda a mercado (USD)', calc:saldoCompraVenda, tipo:'barra', leg:[['bar',FUT_COR.pos,'Compradores dominaram'],['bar',FUT_COR.neg,'Vendedores dominaram']], fmt:fmtUsdS, fmtE:v => (v < 0 ? '-' : '') + '$' + fmtEixo(Math.abs(v)), per:'90',
     ler:(u, s) => { const t7 = s.slice(-7).reduce((a,p) => a + p[1], 0), t30 = s.slice(-30).reduce((a,p) => a + p[1], 0), pos30 = s.slice(-30).filter(p => p[1] > 0).length;
       return `Compras menos vendas a mercado nos derivativos (buy volume − sell volume). Último dia fechado: <b>${fmtUsdS(u[1])}</b> · 7 dias: <b>${fmtUsdS(t7)}</b> · 30 dias: <b>${fmtUsdS(t30)}</b> (${pos30} de ${Math.min(30, s.length)} dias com saldo comprador). Verde = pressão compradora; vermelho = pressão vendedora.`; }},
   {id:'oNet', sinal:() => FLU.find(x => x.id === 'xNet').sinal(), peso:FLU.find(x => x.id === 'xNet').peso, tit:'Exchange Netflow (BTC)', ind:'netflow', tipo:'barra', leg:[['bar',FUT_COR.pos,'Positivo (entrada)'],['bar',FUT_COR.neg,'Negativo (saída)']], fmt:v=>sinal(v,0,' BTC'), fmtE:v=>fmtEixo(v), per:'365',
     ler:() => { const s = serie('netflow'), t = somaUlt(s,7), t30 = somaUlt(s,30); return `Saldo de 7 dias: <b>${sinal(t,0,' BTC')}</b> · 30 dias: <b>${sinal(t30,0,' BTC')}</b>. Positivo = moedas entrando nas corretoras (possível venda); negativo = saindo para custódia própria.`; }},
   {id:'oNetUsd', tit:'Exchange Netflow (USD)', calc:netflowUsd, tipo:'barra', leg:[['bar',FUT_COR.pos,'Positivo (entrada)'],['bar',FUT_COR.neg,'Negativo (saída)']], fmt:fmtUsdS, fmtE:v => (v < 0 ? '-' : '') + '$' + fmtEixo(Math.abs(v)), per:'365',
     ler:(u, s) => { const t = s.slice(-7).reduce((a,p) => a + p[1], 0), t30 = s.slice(-30).reduce((a,p) => a + p[1], 0); return `Saldo de 7 dias: <b>${fmtUsdS(t)}</b> · 30 dias: <b>${fmtUsdS(t30)}</b>. Fluxo em BTC × preço do dia.`; }},
+  {id:'mSopr', tit:'SOPR (Spent Output Profit Ratio)', ind:'sopr', tipo:'linha', duasCores:1, ref:1, cor:FUT_COR.pos, leg:[['lin',FUT_COR.pos,'Acima de 1 · vendendo no lucro'],['lin',FUT_COR.neg,'Abaixo de 1 · vendendo no prejuízo']], fmt:v=>fmtNum(v,3), fmtE:v=>fmtNum(v,3), per:'365',
+    ler:(u, s) => { const m7 = media(s.slice(-7).map(p=>p[1])); return `Hoje <b>${fmtNum(u[1],3)}</b>, média de 7 dias <b>${fmtNum(m7,3)}</b>: ${m7 >= 1 ? 'quem movimenta BTC está, em média, realizando lucro.' : 'quem movimenta BTC está, em média, vendendo no prejuízo (capitulação).'} Em alta, o 1 costuma funcionar como suporte; em baixa, como resistência. Períodos longos abaixo de 1 marcaram fundos.`; }},
   {id:'oRes', sinal:() => FLU.find(x => x.id === 'xRes').sinal(), peso:FLU.find(x => x.id === 'xRes').peso, tit:'Reserva de BTC nas corretoras', ind:'reserva', tipo:'area', cor:'#fb923c', leg:[['lin','#fb923c','Reserva nas corretoras']], fmt:v=>fmtNum(v/1e6,3)+' mi BTC', fmtE:v=>fmtNum(v/1e6,2)+'mi', per:'0',
     ler:(u, s) => `Hoje <b>${fmtNum(u[1]/1e6,2)} mi BTC</b> nas corretoras (${sinal(varPct(s,30),1,'%')} em 30 dias, ${sinal(varPct(s,365),1,'%')} em 1 ano). Caindo = menos BTC disponível para venda.`}
 ];
@@ -4197,11 +4195,8 @@ const ONC_CIC = [
 ];
 function drawdownAth(){ const s = serie('btc_preco'); if (!s || s.length < 2) return null; let mx = 0; return s.filter(p => p[1] > 0).map(p => { mx = Math.max(mx, p[1]); return [p[0], (p[1]/mx - 1)*100]; }); }
 function googleTotal(){ const m = new Map(); GOOGLE.forEach(([k]) => (serie('g_' + k) || []).forEach(([d, v]) => m.set(d, (m.get(d) || 0) + (+v || 0)))); const t = [...m.entries()].sort((a,b) => a[0] < b[0] ? -1 : 1); return t.length ? t : null; }
-const MERC = [
-  {id:'mSopr', tit:'SOPR (Spent Output Profit Ratio)', ind:'sopr', tipo:'linha', duasCores:1, ref:1, cor:FUT_COR.pos, leg:[['lin',FUT_COR.pos,'Acima de 1 · vendendo no lucro'],['lin',FUT_COR.neg,'Abaixo de 1 · vendendo no prejuízo']], fmt:v=>fmtNum(v,3), fmtE:v=>fmtNum(v,3), per:'365',
-    ler:(u, s) => { const m7 = media(s.slice(-7).map(p=>p[1])); return `Hoje <b>${fmtNum(u[1],3)}</b>, média de 7 dias <b>${fmtNum(m7,3)}</b>: ${m7 >= 1 ? 'quem movimenta BTC está, em média, realizando lucro.' : 'quem movimenta BTC está, em média, vendendo no prejuízo (capitulação).'} Em alta, o 1 costuma funcionar como suporte; em baixa, como resistência. Períodos longos abaixo de 1 marcaram fundos.`; }}
-];
-const PAINEIS_EXTRA = {hoje: [{el:'#mercGrade', lista:MERC}], onchain: [{el:'#oncFluGrade', lista:ONC_FLU, placar:'#oncFluPlacar', rot:['FLUXO COMPRADOR','FLUXO VENDEDOR','FLUXO NEUTRO']}, {el:'#oncCicGrade', lista:ONC_CIC}]};
+const MERC = [];   // SOPR foi para a aba On-chain, embaixo do Exchange Netflow (USD)
+const PAINEIS_EXTRA = {onchain: [{el:'#oncFluGrade', lista:ONC_FLU, placar:'#oncFluPlacar', rot:['FLUXO COMPRADOR','FLUXO VENDEDOR','FLUXO NEUTRO']}, {el:'#oncCicGrade', lista:ONC_CIC}]};
 const PAINEIS = {
   etfs: {el:'#etfGrade', lista:ETF_L},
   onchain: {el:'#oncGrade', lista:ONC, mais:ONC_CIC, placar:'#oncPlacar', rot:['ON-CHAIN FAVORÁVEL','ON-CHAIN DESFAVORÁVEL','ON-CHAIN NEUTRO'], fonte:'#fs_onc'},

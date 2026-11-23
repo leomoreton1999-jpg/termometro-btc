@@ -201,8 +201,8 @@ const BUSCAS = [
   ...['binance', 'bybit', 'okx'].map(ex => S('whale_delta_' + ex, '/btc/derivatives/whale_vs_retail_delta', {desde: '2020-01-01', tf: '1d', q: {exchange: ex}})),
   S('toptrader', '/btc/derivatives/toptrader_long_short_ratio', {desde: '2020-01-01', tf: '1d'}),
   S('taker', '/btc/derivatives/taker_long_short_vol_ratio', {tf: '1d'}),
-  S('vol_compra', '/btc/derivatives/buy_volume', {tf: '1d'}),
-  S('vol_venda', '/btc/derivatives/sell_volume', {tf: '1d'}),
+  S('vol_compra', '/btc/derivatives/buy_volume_usd', {tf: '1d'}),
+  S('vol_venda', '/btc/derivatives/sell_volume_usd', {tf: '1d'}),
   S('fear_greed', '/crypto_fear_and_greed/sentiment', {desde: '2018-02-01', campo: 'value'}),
   S('altseason', '/btc/spot/altseason', {desde: '2021-01-01', alt: true, tf: '1d'}),
   ...[['dxy','dxy'],['sp500','sp500'],['vix','vixcls'],['ouro','gold'],['tbill','yield_3m'],['juros_10y','yield_10y'],['m2_global','m2_money_supply_global'],['nasdaq','nasdaq'],['curva_10_2','t10y2y'],['hy_spread','bamlh0a0hym2']]
