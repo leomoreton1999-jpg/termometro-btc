@@ -198,7 +198,7 @@ const BUSCAS = [
   S('whale_ratio', '/btc/derivatives/whale_vs_retail_ratio', {tf: '1d'}),
   S('whale_delta', '/btc/derivatives/whale_vs_retail_delta', {desde: '2020-01-01', tf: '1d'}),
   // o mesmo delta separado por corretora (seletor no gráfico do site)
-  ...['binance', 'bybit', 'okx'].map(ex => S('whale_delta_' + ex, '/btc/derivatives/whale_vs_retail_delta', {desde: '2020-01-01', tf: '1d', q: {exchange: ex}})),
+  ...['binance', 'okx'].map(ex => S('whale_delta_' + ex, '/btc/derivatives/whale_vs_retail_delta', {desde: '2020-01-01', tf: '1d', q: {exchange: ex}})),
   S('toptrader', '/btc/derivatives/toptrader_long_short_ratio', {desde: '2020-01-01', tf: '1d'}),
   S('taker', '/btc/derivatives/taker_long_short_vol_ratio', {tf: '1d'}),
   S('vol_compra', '/btc/derivatives/buy_volume_usd', {tf: '1d'}),

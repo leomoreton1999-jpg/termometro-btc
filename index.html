@@ -3960,7 +3960,7 @@ const FUT_PER = [['7','7d'],['30','30d'],['90','90d'],['ytd','YTD'],['365','1a']
 function fmtK(v){ return v >= 1e6 ? fmtNum(v/1e6, 2) + 'M' : v >= 1e3 ? fmtNum(v/1e3, v >= 1e5 ? 0 : 1) + 'K' : fmtNum(v, v >= 1 ? 0 : v >= 0.1 ? 1 : 2); }
 const FUT_COR = {pos:'#16c784', neg:'#ea3943', btc:'#f7931a', preco:'#ffffff'};
 // Whale vs Retail Delta por corretora (vazio = todas somadas); escolha lembrada neste navegador
-const WH_EXS = [['','Todas as corretoras'],['binance','Binance'],['bybit','Bybit'],['okx','OKX']];
+const WH_EXS = [['','Todas as corretoras'],['binance','Binance'],['okx','OKX (desde dez/2025)']];
 let WH_EX = ''; try { WH_EX = localStorage.getItem('ocp_wh_ex') || ''; } catch(e){}
 if (!WH_EXS.some(x => x[0] === WH_EX)) WH_EX = '';
 const whInd = () => WH_EX ? 'whale_delta_' + WH_EX : 'whale_delta';
