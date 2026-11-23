@@ -245,10 +245,9 @@ async function alphractal(){
   const meta = mercado.meta || {}; meta.buscas = meta.buscas || {}; meta.hist = meta.hist || {};
   let ok = 0, chamadas = 0; const falhas = [];
   for (const b of BUSCAS){
-    const ult = meta.buscas[b.ind];
-    if (ult && (b.cada ? (Date.parse(hoje) - Date.parse(ult))/864e5 < b.cada : ult === hoje)) continue;
+    const ult = meta.buscas[b.ind], refaz = meta.refazer && meta.refazer[b.ind];
+    if (ult && !refaz && (b.cada ? (Date.parse(hoje) - Date.parse(ult))/864e5 < b.cada : ult === hoje)) continue;
     // meta.refazer[ind] = data: busca de novo a partir dessa data (corrige trechos gravados errados)
-    const refaz = meta.refazer && meta.refazer[b.ind];
     const atual = desser(series[b.ind] && series[b.ind].pts), ini = refaz || (atual.length ? menosDias(atual[atual.length-1][0], 3) : (b.desde || menosDias(hoje, 730)));
     try {
       chamadas++;
