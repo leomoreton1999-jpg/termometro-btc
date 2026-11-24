@@ -24,9 +24,44 @@ function agoraBR(){
   return {data: t.slice(0, 10), hora: t.slice(11, 16)};
 }
 const relatorio = [];
+// PARTES=Liquidações (ex.: rodada manual) roda só as partes pedidas; vazio = todas
+const PARTES = (process.env.PARTES || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 async function parte(nome, fn){
+  if (PARTES.length && !PARTES.includes(nome.toLowerCase())) return;
   try { relatorio.push(nome + ': ' + await fn()); }
   catch (e){ relatorio.push(nome + ': FALHOU (' + (e && e.message || e) + '), dados antigos mantidos'); }
+}
+
+/* ---------- Liquidações do mercado todo, 24h (Coinalyze, API grátis com chave COINALYZE_API_KEY) ----------
+   Soma os contratos perpétuos das maiores moedas em todas as corretoras que a Coinalyze cobre.
+   Limite da API: 40 chamadas/min, e cada símbolo conta como 1 chamada; por isso vai em lotes de 20 com pausa. */
+const LIQ_MOEDAS = ['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','SUI','ADA','LINK','AVAX','LTC','ENA','TRX','PEPE','WIF','TON','AAVE','BCH','DOT'];
+async function liqMercado(){
+  const key = process.env.COINALYZE_API_KEY; if (!key) return 'sem a chave COINALYZE_API_KEY, pulado';
+  const H = {headers: {api_key: key}}, base = 'https://api.coinalyze.net/v1';
+  const mk = await (await baixa(base + '/future-markets', H)).json();
+  const norm = a => String(a || '').toUpperCase().replace(/^1000+/, '').replace(/^K(?=PEPE)/, '');
+  const sims = mk.filter(m => m.is_perpetual && LIQ_MOEDAS.includes(norm(m.base_asset)))
+    .sort((a, b) => LIQ_MOEDAS.indexOf(norm(a.base_asset)) - LIQ_MOEDAS.indexOf(norm(b.base_asset))).slice(0, 200);
+  const moedaDe = new Map(sims.map(m => [m.symbol, norm(m.base_asset)]));
+  const to = Math.floor(Date.now()/1000), from = to - 24*3600;
+  let l = 0, s = 0, n = 0; const porMoeda = {};
+  for (let i = 0; i < sims.length; i += 20){
+    if (i) await espera(32000);
+    const lote = sims.slice(i, i + 20).map(m => m.symbol).join(',');
+    const r = await (await baixa(base + '/liquidation-history?' + new URLSearchParams({symbols: lote, interval: '1hour', from, to, convert_to_usd: 'true'}), H)).json();
+    for (const it of (Array.isArray(r) ? r : [])){
+      const c = moedaDe.get(it.symbol) || '?', pm = porMoeda[c] || (porMoeda[c] = {l: 0, s: 0}); let teve = 0;
+      for (const x of (it.history || [])){ const a = +x.l || 0, b = +x.s || 0; l += a; s += b; pm.l += a; pm.s += b; teve = 1; }
+      n += teve;
+    }
+  }
+  if (!(l + s > 0)) throw new Error('nenhuma liquidação retornada');
+  const meta = ler('noticias_meta'), {data, hora} = agoraBR(), r0 = v => Math.round(v);
+  meta.liq_mercado = {data, hora, l: r0(l), s: r0(s), total: r0(l + s), btc: {l: r0(porMoeda.BTC?.l || 0), s: r0(porMoeda.BTC?.s || 0)}, eth: {l: r0(porMoeda.ETH?.l || 0), s: r0(porMoeda.ETH?.s || 0)},
+    mercados: n, moedas: LIQ_MOEDAS.length, fonte: 'Coinalyze', url: 'https://coinalyze.net/futures-data/liquidations/'};
+  gravar('noticias_meta', meta);
+  return 'US$ ' + (l/1e6).toFixed(1) + ' mi longs + US$ ' + (s/1e6).toFixed(1) + ' mi shorts em ' + n + ' mercados (' + sims.length + ' consultados)';
 }
 
 /* ---------- Pools (DefiLlama) ---------- */
@@ -288,4 +323,5 @@ await parte('ETFs', etfs);
 await parte('Notícias', noticias);
 await parte('Agenda', agenda);
 await parte('Alphractal', alphractal);
+await parte('Liquidações', liqMercado);
 console.log(relatorio.join('\n'));

@@ -1021,6 +1021,8 @@ footer.legal{letter-spacing:.01em}
 .nl-nbar{display:flex;flex-wrap:wrap;gap:6px}.nl-nbar input{flex:1 1 180px;width:auto;padding:6px 10px}.nl-nbar button{font-size:12px;padding:5px 10px}
 .nl-lista{display:flex;flex-direction:column;gap:2px;max-height:520px;overflow-y:auto}
 .nl-it{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;padding:8px 6px;border-bottom:1px solid var(--regua);cursor:pointer;font-size:13.5px;line-height:1.4}.nl-it input{margin-top:3px}.nl-it small{display:block;color:var(--cinza);font-size:11.5px;margin-top:2px}.nl-it.on{background:var(--papel3)}
+.nl-add{border:1px dashed var(--regua2);border-radius:var(--raio);padding:8px 10px}.nl-add summary{cursor:pointer;font-size:13px;font-weight:600}.nl-add[open]{display:flex;flex-direction:column;gap:8px}.nl-add input{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--regua2);background:var(--papel);color:var(--tinta);border-radius:var(--raio);width:100%}
+.nl-it .nl-del{margin-left:6px;font-size:11px;padding:1px 7px}.nl-tag{display:inline-block;font-size:10.5px;font-weight:600;color:var(--papel);background:var(--ciano);border-radius:3px;padding:0 5px;margin-right:6px;vertical-align:1px}
 .nl-acoes{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.nl-acoes button.on{background:var(--tinta);border-color:var(--tinta);color:var(--papel)}
 @media(min-width:1000px){.barra nav.secoes{gap:0}.barra nav.secoes button{padding-left:9px;padding-right:9px}}
 </style>
@@ -1218,10 +1220,17 @@ footer.legal{letter-spacing:.01em}
       <div class="card nl-bloco">
         <label class="nl-tit" for="nlMacro">🌍 Macro Outlook <span class="nl-dica">você escreve; fica salvo neste navegador</span></label>
         <textarea id="nlMacro" rows="8" placeholder="Escreva aqui a leitura macro do dia…"></textarea>
+        <div class="nl-acoes"><button type="button" id="nlClaude">Ajustar escrita com o Claude</button><span class="nl-dica">abre o Claude com o seu texto e o pedido prontos; cole a versão ajustada de volta aqui</span></div>
       </div>
       <div class="card nl-bloco">
         <div class="nl-tit">📰 Notícias <span class="nl-dica">marque as que entram · já vêm marcadas as mais relevantes</span></div>
         <div class="nl-nbar"><input type="search" id="nlBusca" placeholder="Buscar notícia"><button type="button" id="nlTop">Marcar as principais</button><button type="button" id="nlNenhuma">Desmarcar todas</button></div>
+        <details class="nl-add"><summary>+ Adicionar notícia que não está no painel</summary>
+          <input type="text" id="nlAddTit" placeholder="Título">
+          <textarea id="nlAddRes" rows="3" placeholder="Resumo (o que aconteceu e por que importa)"></textarea>
+          <input type="url" id="nlAddUrl" placeholder="Link (opcional)">
+          <div class="nl-acoes"><button type="button" id="nlAddOk" class="on">Adicionar e marcar</button><span id="nlAddMsg" class="nl-dica"></span></div>
+        </details>
         <div id="nlNoticias" class="nl-lista"><p class="vazio">Carregando notícias…</p></div>
       </div>
     </div>
@@ -1233,7 +1242,7 @@ footer.legal{letter-spacing:.01em}
       </div>
     </div>
   </div>
-  <p class="fonte-sec">Números: preços, market cap e dominância da CoinGecko e Fear &amp; Greed da Alternative.me, buscados ao abrir a aba (grátis); liquidações de BTC em 24h da Alphractal e fluxo dos ETFs da SoSoValue, da atualização diária do painel. Nada aqui gasta crédito.</p>
+  <p class="fonte-sec">Números: preços, market cap e dominância da CoinGecko e Fear &amp; Greed da Alternative.me, buscados ao abrir a aba (grátis); liquidações de 24h do mercado todo da Coinalyze (ou só de BTC, da Alphractal, quando faltar) e fluxo dos ETFs da SoSoValue, da atualização diária do painel. Nada aqui gasta crédito.</p>
 </section>
 
 <section id="tvAba" data-aba="tv">
@@ -5147,29 +5156,34 @@ function nlValores(){
   o.fg = NL.fg != null ? NL.fg : (typeof ultimo === 'function' ? ultimo('fear_greed') : null);
   o.precos = NL_MOEDAS.map(([s, id]) => { const c = NL.cg && NL.cg[id]; if (c && isFinite(c.usd)) return [s, c.usd, c.usd_24h_change];
     if (s === 'BTC' && R.priceUsd && isFinite(R.priceUsd.current)) return [s, R.priceUsd.current, R.priceUsd.change1d]; return [s, null, null]; });
-  try { const l = liq24(); if (l) o.liq = {l:l.btc.l, s:l.btc.s, t:l.total, data:l.data}; } catch(e){}
+  const M = NL.liqM, ontem = new Date(Date.now() - 36*3600e3).toISOString().slice(0,10);
+  if (M && M.total > 0 && M.data >= ontem) o.liq = {l:M.l, s:M.s, t:M.total, data:M.data, todo:1};
+  else { try { const l = liq24(); if (l) o.liq = {l:l.btc.l, s:l.btc.s, t:l.total, data:l.data}; } catch(e){} }
   const dias = NT_ETF2 && NT_ETF2.dias; if (dias && dias.length){ const u = dias[dias.length-1]; o.etf = {v:u[1], data:u[0]}; }
   return o;
 }
 function nlDados(){
-  const el = $('#nlDados'); if (!el) return; const o = nlValores();
+  const el = $('#nlDados'); if (!el) return;
+  if (!NL.liqPedido && DB){ NL.liqPedido = 1; try { DB.collection('noticias_meta').doc('liq_mercado').get().then(d => { NL.liqM = d.exists ? d.data() : null; nlDados(); nlGera(); }, () => {}); } catch(e){} } const o = nlValores();
   const c = (rot, val, sub) => `<div class="nl-dado${val == null ? ' falta' : ''}"><span>${esc(rot)}</span><b>${val == null ? (NL.buscando ? 'buscando…' : 'sem dado') : esc(val)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div>`;
   el.innerHTML = c('Market cap', o.mcap ? nlUsd(o.mcap) : null, isFinite(o.mcapVar) ? nlPct(o.mcapVar) + ' em 24h' : '') + c('Dominância BTC', isFinite(o.dom) ? nlNum(o.dom,1) + '%' : null)
     + c('Fear & Greed', isFinite(o.fg) && o.fg != null ? Math.round(o.fg) + ' · ' + nlFgNome(o.fg) : null)
     + o.precos.map(([s, v, ch]) => c(s, v != null ? nlPreco(v) : null, isFinite(ch) && ch != null ? nlPct(ch) : '')).join('')
-    + c('Liquidações BTC 24h', o.liq ? nlUsd(o.liq.t) : null, o.liq ? 'longs ' + nlUsd(o.liq.l) + ' · shorts ' + nlUsd(o.liq.s) : '')
+    + c(o.liq && o.liq.todo ? 'Liquidações 24h (mercado todo)' : 'Liquidações BTC 24h', o.liq ? nlUsd(o.liq.t) : null, o.liq ? 'longs ' + nlUsd(o.liq.l) + ' · shorts ' + nlUsd(o.liq.s) : '')
     + c('ETFs (entrada líquida)', o.etf ? nlUsd(o.etf.v) : null, o.etf ? 'dia ' + nlDataBR(o.etf.data) : '');
 }
-function nlLista(){ return (NOTICIAS || []).filter(n => (n.lang || 'pt') === 'pt').sort((a, b) => a.data < b.data ? 1 : a.data > b.data ? -1 : (+b.relevancia||0) - (+a.relevancia||0)).slice(0, 80); }
-function nlPrincipais(){ const L = nlLista(); if (!L.length) return []; const dias = [...new Set(L.map(n => n.data))].slice(0, 2);
+const nlHojeIso = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+function nlExtras(){ let x = []; try { x = JSON.parse(nlLs('ocp_nl_extra') || '[]'); } catch(e){} const lim = new Date(Date.now() - 3*864e5).toISOString().slice(0,10); return x.filter(n => n && n.titulo && n.data >= lim); }
+function nlLista(){ return nlExtras().concat((NOTICIAS || []).filter(n => (n.lang || 'pt') === 'pt').sort((a, b) => a.data < b.data ? 1 : a.data > b.data ? -1 : (+b.relevancia||0) - (+a.relevancia||0)).slice(0, 80)); }
+function nlPrincipais(){ const L = nlLista().filter(n => !n.propria); if (!L.length) return []; const dias = [...new Set(L.map(n => n.data))].slice(0, 2);
   return L.filter(n => dias.includes(n.data)).sort((a, b) => (+b.relevancia||0) - (+a.relevancia||0) || (a.data < b.data ? 1 : -1)).slice(0, 3).map(n => n.url || n.titulo); }
 function nlNoticias(){
   const el = $('#nlNoticias'); if (!el) return;
-  if (!NOTICIAS){ el.innerHTML = '<p class="vazio">Carregando notícias…</p>'; return; }
+  if (!NOTICIAS && !nlExtras().length){ el.innerHTML = '<p class="vazio">Carregando notícias…</p>'; return; }
   if (NL.sel === null){ let s = null; try { s = JSON.parse(nlLs('ocp_nl_sel_' + nlHoje()) || 'null'); } catch(e){} NL.sel = s || nlPrincipais(); }
   const q = NL.busca.trim().toLowerCase(), L = nlLista().filter(n => !q || (n.titulo + ' ' + (n.resumo||'')).toLowerCase().includes(q));
   el.innerHTML = L.length ? L.map(n => { const k = n.url || n.titulo, on = NL.sel.includes(k);
-    return `<label class="nl-it${on ? ' on' : ''}"><input type="checkbox" data-nl="${esc(k)}"${on ? ' checked' : ''}><span>${esc(n.titulo)}<small>${esc(n.fonte || '')} · ${nlDataBR(n.data)}${n.relevancia ? ' · relevância ' + n.relevancia + '/5' : ''}</small></span></label>`; }).join('') : '<p class="vazio">Nenhuma notícia encontrada.</p>';
+    return `<label class="nl-it${on ? ' on' : ''}"><input type="checkbox" data-nl="${esc(k)}"${on ? ' checked' : ''}><span>${n.propria ? '<span class="nl-tag">SUA</span>' : ''}${esc(n.titulo)}<small>${esc(n.fonte || '')} · ${nlDataBR(n.data)}${n.propria ? ` <button type="button" class="nl-del" data-nldel="${esc(k)}">remover</button>` : ''}${n.relevancia ? ' · relevância ' + n.relevancia + '/5' : ''}</small></span></label>`; }).join('') : '<p class="vazio">Nenhuma notícia encontrada.</p>';
 }
 const nlFrase = (t, max) => { t = String(t || '').replace(/\s+/g, ' ').replace(/\s*O post .*? apareceu primeiro em .*$/i, '').replace(/\s*The post .*? appeared first on .*$/i, '').trim(); if (t && !/[.!?…]$/.test(t)) t += '.'; const fr = t.match(/[^.!?]+[.!?]+/g) || [t]; let o = ''; for (const f of fr){ if ((o + f).length > max && o) break; o += f; } return o.trim(); };
 function nlGera(forca){
@@ -5202,6 +5216,23 @@ function nlAbre(){
     $('#nlNenhuma').onclick = () => { NL.sel = []; nlLs('ocp_nl_sel_' + nlHoje(), '[]'); nlNoticias(); nlGera(); };
     $('#nlTexto').addEventListener('input', () => { NL.editado = true; });
     $('#nlRefaz').onclick = () => nlGera(true);
+    const salvaSel = () => nlLs('ocp_nl_sel_' + nlHoje(), JSON.stringify(NL.sel));
+    $('#nlAddOk').onclick = () => {
+      const t = $('#nlAddTit').value.trim(), r = $('#nlAddRes').value.trim(), u = $('#nlAddUrl').value.trim();
+      if (!t){ $('#nlAddMsg').textContent = 'Escreva pelo menos o título.'; return; }
+      const n = {titulo:t, resumo:r, url:u || ('sua:' + Date.now()), fonte:'Adicionada por você', data:nlHojeIso(), lang:'pt', propria:1};
+      const x = nlExtras(); x.unshift(n); nlLs('ocp_nl_extra', JSON.stringify(x));
+      NL.sel = NL.sel || []; NL.sel.unshift(n.url); salvaSel();
+      $('#nlAddTit').value = $('#nlAddRes').value = $('#nlAddUrl').value = ''; $('#nlAddMsg').textContent = 'Adicionada e marcada.';
+      nlNoticias(); nlGera(); };
+    $('#nlNoticias').addEventListener('click', e => { const b = e.target.closest('[data-nldel]'); if (!b) return; e.preventDefault(); const k = b.dataset.nldel;
+      nlLs('ocp_nl_extra', JSON.stringify(nlExtras().filter(n => n.url !== k))); NL.sel = (NL.sel || []).filter(x => x !== k); salvaSel(); nlNoticias(); nlGera(); });
+    $('#nlClaude').onclick = () => {
+      const t = $('#nlMacro').value.trim(); if (!t){ $('#nlMsg').textContent = 'Escreva o Macro Outlook antes de pedir o ajuste.'; return; }
+      const pedido = 'Revise o texto abaixo. É o "Macro Outlook" da newsletter diária de cripto que mando para os clientes da mentoria On Crypto Pro. '
+        + 'Corrija o português, deixe mais claro, fluido e profissional, mantendo meu sentido, minhas opiniões e recomendações, e mais ou menos o mesmo tamanho. '
+        + 'Tom direto e confiante, em português do Brasil, sem emoji, sem inventar dado nem notícia que não esteja no texto. Devolva só o texto final, pronto para colar.\n\n---\n' + t;
+      window.open('https://claude.ai/new?q=' + encodeURIComponent(pedido), '_blank', 'noopener'); };
     $('#nlAtualiza').onclick = () => nlBusca();
     $('#nlCopiar').onclick = async () => { const t = $('#nlTexto'); try { await navigator.clipboard.writeText(t.value); $('#nlMsg').textContent = 'Texto copiado.'; } catch(e){ t.focus(); t.select(); $('#nlMsg').textContent = 'Selecionei o texto: use Ctrl+C.'; } };
     nlBusca();

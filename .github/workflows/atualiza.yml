@@ -2,7 +2,12 @@ name: Atualiza dados
 on:
   schedule:
     - cron: '0 10 * * *'   # 7h de Brasília, todo dia
-  workflow_dispatch: {}     # botão "Run workflow" para rodar na hora
+  workflow_dispatch:        # botão "Run workflow" para rodar na hora
+    inputs:
+      partes:
+        description: 'Só estas partes, separadas por vírgula (ex.: Liquidações). Vazio = todas'
+        required: false
+        default: ''
   push:                     # roda também quando o robô é alterado (os commits de dados não disparam)
     branches: [main]
     paths: ['scripts/**', '.github/workflows/**']
@@ -23,6 +28,8 @@ jobs:
           SOSOVALUE_API_KEY: ${{ secrets.SOSOVALUE_API_KEY }}
           ALPHRACTAL_API_KEY: ${{ secrets.ALPHRACTAL_API_KEY }}
           ALPHRACTAL_API_URL: ${{ secrets.ALPHRACTAL_API_URL }}
+          COINALYZE_API_KEY: ${{ secrets.COINALYZE_API_KEY }}
+          PARTES: ${{ github.event.inputs.partes }}
         run: node scripts/atualiza.mjs | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Gravar
         run: |
