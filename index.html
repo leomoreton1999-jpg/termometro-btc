@@ -4149,7 +4149,16 @@ const ONC = [
     ler:(u) => `Hoje <b>${fmtPct01(u[1])}</b>. Quedas fortes desse indicador aconteceram nos fundos de 2015, 2019, 2022; perto de 100% é mercado maduro de alta.`},
   {id:'oSth', tit:'STH: % da oferta no lucro', ind:'sth_supply_in_profit_pct', tipo:'linha', cor:'#f7931a', leg:[['lin','#f7931a','STH supply in profit %']], fmt:fmtPct01, fmtE:v=>fmtNum(v*100,0)+'%', per:'365',
     sinal:() => { const u = ultimo('sth_supply_in_profit_pct'); if (!u) return null; return u[1] < 0.2 ? S('ajuda', `Só ${fmtPct01(u[1])} dos novos compradores no lucro: capitulação de curto prazo`) : u[1] > 0.9 ? S('contra', `${fmtPct01(u[1])} dos novos compradores no lucro: risco de realização`) : S('neutro', `${fmtPct01(u[1])} dos novos compradores no lucro`); },
-    ler:(u) => `Hoje <b>${fmtPct01(u[1])}</b>. Oscila muito: perto de 0% os novos compradores estão no prejuízo (fundos locais); perto de 100%, todos no lucro e tentados a vender (topos locais).`}
+    ler:(u) => `Hoje <b>${fmtPct01(u[1])}</b>. Oscila muito: perto de 0% os novos compradores estão no prejuízo (fundos locais); perto de 100%, todos no lucro e tentados a vender (topos locais).`},
+  {id:'oBandas', tit:'Bandas estruturais de mercado (Structural Market Bands)', tipo:'multi', per:'0',
+    series:[{ind:'struct_res_sup', nome:'Resistência · banda de cima', cor:'#e0564f'}, {ind:'struct_res_inf', nome:'Resistência · banda de baixo', cor:'#b8453f'},
+      {calc:() => bandaMeio(), nome:'Linha do meio', cor:'#9aa3ad', tracejado:true},
+      {ind:'struct_sup_sup', nome:'Suporte · banda de cima', cor:'#2f9e6e'}, {ind:'struct_sup_inf', nome:'Suporte · banda de baixo', cor:'#3fb984'}],
+    zonas:[{a:0, b:1, cor:'rgba(224,86,79,.30)'}, {a:3, b:4, cor:'rgba(63,185,132,.30)'}], sinais:{acima:0, abaixo:4},
+    leg:[['lin','#e0564f','Resistência (topo)'],['lin','#b8453f','Resistência (base)'],['lin','#9aa3ad','Linha do meio'],['lin','#2f9e6e','Suporte (topo)'],['lin','#3fb984','Suporte (base)']],
+    ler:() => { const p = ultimo('btc_preco'), rs = ultimo('struct_res_sup'), ri = ultimo('struct_res_inf'), ss = ultimo('struct_sup_sup'), si = ultimo('struct_sup_inf'); if (!p || !ri || !ss) return '';
+      const onde = rs && p[1] > rs[1] ? 'acima da zona de resistência (sinal vermelho: historicamente perto de topos)' : p[1] >= ri[1] ? 'dentro da zona de resistência' : si && p[1] < si[1] ? 'abaixo da zona de suporte (sinal verde: historicamente perto de fundos)' : p[1] <= ss[1] ? 'dentro da zona de suporte' : 'entre o suporte e a resistência';
+      return `Preço <b>$${fmtNum(p[1],0)}</b>, ${onde}. Resistência entre <b>$${fmtNum(ri[1],0)}</b> e <b>$${fmtNum(rs ? rs[1] : ri[1],0)}</b>; suporte entre <b>$${fmtNum(si ? si[1] : ss[1],0)}</b> e <b>$${fmtNum(ss[1],0)}</b>. As bandas vêm do agrupamento do preço de custo on-chain: onde há muita oferta comprada, o preço tende a travar (resistência) ou a segurar (suporte). Faixas verticais vermelhas = preço acima da resistência; verdes = preço abaixo do suporte.`; }},
 ];
 /* ================= ABA ETFs ================= */
 const ETF_NOMES = {IBIT:'BlackRock', FBTC:'Fidelity', GBTC:'Grayscale', BTC:'Grayscale Mini', ARKB:'Ark 21Shares', BITB:'Bitwise', HODL:'VanEck', MSBT:'Morgan Stanley', BITA:'BlackRock (renda)', BRRR:'Valkyrie', EZBC:'Franklin', BTCO:'Invesco', BTCW:'WisdomTree', DEFI:'Hashdex'};
@@ -4370,6 +4379,8 @@ function desenhaPilha(c){
   zoomArrasto(el, svg, m, iw, ih, x0, span, r => { ZOOM[c.id] = r; desenhaFut(c); }, !!ZOOM[c.id]);
   $('#l_'+c.id).innerHTML = c.ler ? c.ler() : '';
 }
+// linha do meio das bandas estruturais: média geométrica entre o topo do suporte e a base da resistência
+function bandaMeio(){ const a = serie('struct_sup_sup'), b = serie('struct_res_inf'); if (!a || !b) return null; const mb = new Map(b); return a.filter(p => mb.has(p[0]) && p[1] > 0 && mb.get(p[0]) > 0).map(p => [p[0], Math.sqrt(p[1]*mb.get(p[0]))]); }
 function desenhaMulti(c){
   const el = document.getElementById(c.id); if (!el) return;
   const pr0 = serie('btc_preco'); const ssAll = c.series.map((x, k) => ({...x, k, s: x.calc ? x.calc() : serie(x.ind)})).filter(x => x.s && x.s.length > 1), ss = ssAll.filter(x => !serOff(c.id, x.k));
@@ -4391,7 +4402,14 @@ function desenhaMulti(c){
   if (span > 540){ for (let ano = +isoDe(x0).slice(0,4)+1; ano <= +isoDe(x1).slice(0,4); ano++){ if (span > 2500 && ano % 2) continue; const x = X(dnum(ano + '-01-01')); g += `<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle" style="fill:#c3cad8">${ano}</text>`; } }
   else { const nT = Math.max(2, Math.floor(iw/90)); for (let i=0;i<=nT;i++){ const n = x0 + span*i/nT; g += `<text x="${X(n).toFixed(1)}" y="${H-6}" text-anchor="${i===0?'start':i===nT?'end':'middle'}">${span > 120 ? fmtMes(isoDe(n)) : fmtData(isoDe(n)).slice(0,5)}</text>`; } }
   const linha = (pts, cor, w, tr) => { let d = ''; pts.forEach((p,i) => { if (p._n < x0) return; d += (d ? 'L' : 'M') + X(p._n).toFixed(1) + ' ' + Y(p[1]).toFixed(1); }); return `<path d="${d}" fill="none" stroke="${cor}" stroke-width="${w}" stroke-linejoin="round"${tr ? ' stroke-dasharray="6 4"' : ''}/>`; };
-  L.forEach(x => g += linha(x.pts, x.cor, 1.6, x.tracejado));
+  const porK = k => L.find(x => x.k === k);
+  if (c.sinais && pr.length){ const A = porK(c.sinais.acima), B = porK(c.sinais.abaixo), mA = A ? new Map(A.pts.map(p => [p[0], p[1]])) : null, mB = B ? new Map(B.pts.map(p => [p[0], p[1]])) : null, dx = Math.max(1, iw/(span || 1));
+    pr.forEach(p => { if (p._n < x0) return; const a = mA && mA.get(p[0]), b = mB && mB.get(p[0]); const cor = a && p[1] > a ? 'rgba(224,86,79,.55)' : b && p[1] < b ? 'rgba(63,185,132,.55)' : null;
+      if (cor) g += `<rect x="${(X(p._n) - dx/2).toFixed(1)}" y="${m.t}" width="${dx.toFixed(2)}" height="${ih}" fill="${cor}"/>`; }); }
+  (c.zonas || []).forEach(z => { const A = porK(z.a), B = porK(z.b); if (!A || !B) return; const mB = new Map(B.pts.map(p => [p[0], p])); const par = A.pts.filter(p => p._n >= x0 && mB.has(p[0])); if (par.length < 2) return;
+    const top = par.map(p => X(p._n).toFixed(1) + ' ' + Y(p[1]).toFixed(1)), bot = par.slice().reverse().map(p => X(p._n).toFixed(1) + ' ' + Y(mB.get(p[0])[1]).toFixed(1));
+    g += `<path d="M${top.join('L')}L${bot.join('L')}Z" fill="${z.cor}" stroke="none"/>`; });
+  L.forEach(x => g += linha(x.pts, x.cor, c.zonas ? 1.1 : 1.6, x.tracejado));
   if (!semP) g += linha(pr, '#ffffff', 1.4);
   g += `<line x1="${m.l+iw}" x2="${m.l+iw}" y1="${m.t}" y2="${m.t+ih}" stroke="#fff" stroke-width="2"/>`;
   const bad = (semP ? [] : [{v: pr[pr.length-1][1], cor:'#fff', tx:'#0d1220'}]).concat(L.map(x => ({v: x.pts[x.pts.length-1][1], cor:x.cor, tx:'#0d1220'}))).map(b => ({...b, y: clamp(Y(b.v), m.t+9, m.t+ih-9)})).sort((a,b) => a.y-b.y);
@@ -4609,6 +4627,8 @@ const CATALOGO = [
   {g:'On-chain', ind:'alpha_price', nome:'Preço Alpha', fmt:v=>'$'+fmtNum(v,0), dica:'Modelo de João Wedson que funciona como teto teórico de valuation.'},
   {g:'On-chain', ind:'lth_supply_in_profit_pct', nome:'LTH: % da oferta no lucro', fmt:v=>fmtNum(v*100,1)+'%', dica:'Parte da oferta dos holders de longo prazo que está no lucro.'},
   {g:'On-chain', ind:'sth_supply_in_profit_pct', nome:'STH: % da oferta no lucro', fmt:v=>fmtNum(v*100,1)+'%', dica:'Parte da oferta dos holders de curto prazo que está no lucro.'},
+  {g:'On-chain', ind:'struct_res_inf', nome:'Bandas estruturais: base da resistência', fmt:v=>'$'+fmtNum(v,0), dica:'Borda de baixo da zona de resistência das Structural Market Bands.'},
+  {g:'On-chain', ind:'struct_sup_sup', nome:'Bandas estruturais: topo do suporte', fmt:v=>'$'+fmtNum(v,0), dica:'Borda de cima da zona de suporte das Structural Market Bands.'},
   {g:'On-chain', ind:'sopr', nome:'SOPR', fmt:v=>fmtNum(v,3), ref:1, dica:'Preço de venda ÷ preço de compra das moedas movimentadas no dia. Acima de 1 = vendendo no lucro; abaixo de 1 = vendendo no prejuízo.'},
   {g:'On-chain', ind:'reserva', nome:'BTC nas corretoras', fmt:v=>fmtNum(v/1e6,3)+' mi BTC', dica:DICAS['BTC nas corretoras']},
   {g:'On-chain', ind:'netflow', dif:[0,' BTC'], nome:'Fluxo líquido nas corretoras', fmt:v=>sinal(v,0,' BTC'), barra:true, ref:0, dica:DICAS['Fluxo líquido nas corretoras']},

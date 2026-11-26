@@ -27,7 +27,7 @@ const relatorio = [];
 // PARTES=Liquidações (ex.: rodada manual) roda só as partes pedidas; vazio = todas
 const PARTES = (process.env.PARTES || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 async function parte(nome, fn){
-  if (PARTES.length && !PARTES.includes(nome.toLowerCase())) return;
+  if (PARTES.length && !PARTES.includes(nome.toLowerCase()) && !(nome === 'Alphractal' && PARTES.includes('séries'))) return;
   try { relatorio.push(nome + ': ' + await fn()); }
   catch (e){ relatorio.push(nome + ': FALHOU (' + (e && e.message || e) + '), dados antigos mantidos'); }
 }
@@ -222,6 +222,11 @@ const BUSCAS = [
   S('alpha_price', '/btc/lifespan/alpha_price'),
   S('lth_supply_in_profit_pct', '/btc/market/lth_supply_in_profit_pct', {desde: '2011-01-01'}),
   S('sth_supply_in_profit_pct', '/btc/market/sth_supply_in_profit_pct', {desde: '2011-01-01'}),
+  // Structural Market Bands (zonas de suporte e resistência pelo custo on-chain)
+  S('struct_res_sup', '/btc/market/structural_resistance_upper_band', {desde: '2011-01-01'}),
+  S('struct_res_inf', '/btc/market/structural_resistance_lower_band', {desde: '2011-01-01'}),
+  S('struct_sup_sup', '/btc/market/structural_support_upper_band', {desde: '2011-01-01'}),
+  S('struct_sup_inf', '/btc/market/structural_support_lower_band', {desde: '2011-01-01'}),
   S('reserva', '/btc/exchange_flow/exchange_reserve'),
   S('netflow', '/btc/exchange_flow/exchange_netflow'),
   S('entrada_ex', '/btc/exchange_flow/FlowInExNtv'),
@@ -296,6 +301,7 @@ async function alphractal(){
     } catch (e){ falhas.push(b.ind + ' (' + e.message + ')'); }
   }
   gravar('series', series);
+  if (PARTES.includes('séries')) return ok + ' séries atualizadas, ' + chamadas + ' chamadas (~' + chamadas*10 + ' créditos), só séries (rodada manual)' + (falhas.length ? '; falharam: ' + falhas.join('; ') : '');
   // resumo do mercado (preço, OI, long/short, liquidações 24h)
   try { chamadas++; const r = camel(await ax('/summary/btc')); if (r && r.priceUsd){ mercado.resumo = {...(mercado.resumo || {}), ...r}; delete mercado.resumo.liqJanelas; } }
   catch (e){ falhas.push('resumo (' + e.message + ')'); }
