@@ -713,6 +713,7 @@ body.com-maxi{overflow:hidden}
 @media (max-width:640px){.sr{grid-template-columns:1fr}}
 .zoom-reset{position:absolute;top:6px;left:64px;z-index:4;font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:rgba(34,211,238,.15);border:1px solid rgba(34,211,238,.5);color:#22d3ee}
 .graf .zoom-reset{left:56px}
+.zoom-reset.esc-reset{left:auto;right:78px}
 .gx-area{min-width:0}
 .gx-dir{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
 .gx-ult{font-size:12px;color:#aab3c5}.gx-ult b{font-family:var(--mono);color:#e6e9f0;margin-left:4px}.gx-ult em{font-style:normal;font-family:var(--mono);margin-left:6px}
@@ -2874,6 +2875,44 @@ function aviso(html, erro, some){
 
 /* ================= ZOOM POR ARRASTO ================= */
 const ZOOM = {}, GZOOM = {};
+// ===== Escala vertical com o mouse (como no TradingView) =====
+// Em cima dos números do eixo: rodinha ou arrastar para cima/baixo = aumenta/diminui a escala; Shift + rodinha = sobe/desce;
+// duplo clique = volta ao automático. Vale para todos os gráficos (cada eixo separado).
+const ESC = {};
+function escY(key, eixo, a, b){
+  const s = ESC[key] && ESC[key][eixo]; if (!s || !isFinite(a) || !isFinite(b) || a === b) return [a, b];
+  const meio = (a + b)/2 + (s.o || 0)*(b - a), meia = (b - a)/2/(s.f || 1); return [meio - meia, meio + meia];
+}
+let ESC_ARR = null, ESC_RAF = 0;
+addEventListener('pointermove', ev => { const d = ESC_ARR; if (!d) return; ev.preventDefault();
+  const s = (ESC[d.key] = ESC[d.key] || {})[d.eixo] = ESC[d.key][d.eixo] || {f:1, o:0};
+  s.f = clamp(d.f0*Math.exp(-(ev.clientY - d.y0)/160), 0.15, 40);
+  if (!ESC_RAF) ESC_RAF = requestAnimationFrame(() => { ESC_RAF = 0; d.redraw(); }); }, {passive:false});
+addEventListener('pointerup', () => { if (ESC_ARR){ ESC_ARR = null; document.body.style.cursor = ''; } });
+function escalaY(el, svg, m, iw, ih, key, redraw, eixos){
+  const NS = 'http://www.w3.org/2000/svg', W = +svg.getAttribute('width');
+  const ativo = ESC[key] && Object.values(ESC[key]).some(s => s && (s.f !== 1 || s.o));
+  if (ativo){ // corta o que sai da área do gráfico
+    const cid = 'clp_' + key.replace(/[^a-z0-9]/gi, '_'), defs = document.createElementNS(NS, 'defs'), cp = document.createElementNS(NS, 'clipPath'), r = document.createElementNS(NS, 'rect');
+    cp.setAttribute('id', cid); [['x', m.l], ['y', m.t], ['width', iw], ['height', ih]].forEach(([k, v]) => r.setAttribute(k, v)); cp.appendChild(r); defs.appendChild(cp); svg.insertBefore(defs, svg.firstChild);
+    svg.querySelectorAll('path, polyline, polygon, circle, rect:not(.alvo)').forEach(n => { if (n.closest('defs')) return; if (n.tagName === 'rect' && +n.getAttribute('x') >= m.l + iw - 1) return; n.setAttribute('clip-path', `url(#${cid})`); });
+    const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'zoom-reset esc-reset'; bt.textContent = 'Escala automática';
+    bt.onclick = () => { delete ESC[key]; redraw(); }; el.appendChild(bt);
+  }
+  Object.entries(eixos || {e:'l'}).forEach(([eixo, lado]) => {
+    const g = document.createElementNS(NS, 'rect'), x = lado === 'l' ? 0 : m.l + iw, w = lado === 'l' ? m.l : W - m.l - iw;
+    [['x', x], ['y', m.t], ['width', Math.max(0, w)], ['height', ih], ['fill', 'transparent'], ['class', 'esc-eixo']].forEach(([k, v]) => g.setAttribute(k, v));
+    g.style.cursor = 'ns-resize'; g.style.touchAction = 'none';
+    const t = document.createElementNS(NS, 'title'); t.textContent = 'Arraste para cima/baixo ou use a rodinha para mudar a escala · Shift + rodinha move · duplo clique volta ao automático'; g.appendChild(t);
+    const st = () => (ESC[key] = ESC[key] || {})[eixo] = ESC[key][eixo] || {f:1, o:0};
+    g.addEventListener('wheel', ev => { ev.preventDefault(); const s = st();
+      if (ev.shiftKey) s.o = clamp((s.o || 0) + (ev.deltaY > 0 ? -0.06 : 0.06)/s.f, -5, 5); else s.f = clamp(s.f*(ev.deltaY < 0 ? 1.15 : 1/1.15), 0.15, 40);
+      redraw(); }, {passive:false});
+    g.addEventListener('pointerdown', ev => { if (ev.button > 0) return; ev.preventDefault(); ESC_ARR = {key, eixo, y0: ev.clientY, f0: st().f, redraw}; document.body.style.cursor = 'ns-resize'; });
+    g.addEventListener('dblclick', ev => { ev.preventDefault(); if (ESC[key]) delete ESC[key][eixo]; redraw(); });
+    svg.appendChild(g);
+  });
+}
 function zoomArrasto(el, svg, m, iw, ih, x0, span, aplicar, temZoom){
   const alvo = svg.querySelector('.alvo'); if (!alvo) return;
   alvo.style.cursor = 'crosshair'; svg.style.touchAction = 'pan-y';
@@ -2927,7 +2966,7 @@ function desenha(id){
     if (a === b) { a -= Math.abs(a)*0.1||1; b += Math.abs(b)*0.1||1; }
     const pad = (b-a)*0.06; return [a-pad, b+pad];
   };
-  const DE = dom('e'), DD = temD ? dom('d') : null;
+  const DE = escY('g:' + id, 'e', ...dom('e')), DD = temD ? escY('g:' + id, 'd', ...dom('d')) : null;
   const X = n => m.l + (n-x0)/(x1-x0)*iw;
   const Y = (v, e) => { const d = e==='d' ? DD : DE; return m.t + (1-(v-d[0])/(d[1]-d[0]))*ih; };
   const c = { regua:cssv('regua'), cinza:cssv('cinza') };
@@ -3010,6 +3049,7 @@ function desenha(id){
   svg.querySelector('.alvo').addEventListener('pointermove', mover);
   svg.querySelector('.alvo').addEventListener('pointerleave', ()=>{ tip.style.display='none'; cruz.setAttribute('visibility','hidden'); });
   zoomArrasto(el, svg, m, iw, ih, x0, x1-x0, r => { GZOOM[id] = r; desenha(id); }, !!gz);
+  escalaY(el, svg, m, iw, ih, 'g:' + id, () => desenha(id), temD ? {e:'l', d:'r'} : {e:'l'});
 }
 
 
@@ -4215,15 +4255,15 @@ function exGrafico(){
     <div class="ex-svg"></div>`;
   const box = el.querySelector('.ex-svg'), W = Math.max(280, box.clientWidth), H = innerWidth < 640 ? 260 : 340, m = {l:58, r:62, t:10, b:24}, iw = W-m.l-m.r, ih = H-m.t-m.b;
   const n = L.length, bw = iw/n, X = i => m.l + bw*(i+0.5);
-  let a = Math.min(0, ...L.map(x => x.inf)), b = Math.max(0, ...L.map(x => x.inf)); const pd = (b-a)*0.08 || 1; a -= pd; b += pd;
+  let a = Math.min(0, ...L.map(x => x.inf)), b = Math.max(0, ...L.map(x => x.inf)); const pd = (b-a)*0.08 || 1; a -= pd; b += pd; [a, b] = escY('exG', 'e', a, b);
   const Y = v => m.t + (1-(v-a)/(b-a))*ih;
   const nas = L.filter(x => x.na != null), na0 = nas.length ? Math.min(...nas.map(x => x.na)) : 0, na1 = nas.length ? Math.max(...nas.map(x => x.na)) : 1, pn = (na1-na0)*0.08 || na1*0.05 || 1;
   const YN = v => m.t + (1-(v-(na0-pn))/((na1+pn)-(na0-pn)))*ih;
   const prs = L.filter(x => x.pr), p0 = prs.length ? Math.min(...prs.map(x => x.pr)) : 0, p1 = prs.length ? Math.max(...prs.map(x => x.pr)) : 1, pp = (p1-p0)*0.08 || 1;
-  const YP = v => m.t + (1-(v-(p0-pp))/((p1+pp)-(p0-pp)))*ih;
+  const [pA, pB] = escY('exG', 'p', p0-pp, p1+pp), YP = v => m.t + (1-(v-pA)/(pB-pA))*ih;
   let g = '';
   ticks(a, b, 5).forEach(v => { const y = Y(v); if (y < m.t-1 || y > m.t+ih+1) return; g += `<line x1="${m.l}" x2="${m.l+iw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#20242a"/><text x="${m.l-8}" y="${(y+3.5).toFixed(1)}" text-anchor="end">${esc(v === 0 ? '0' : exAx(v))}</text>`; });
-  if (prs.length) ticks(p0-pp, p1+pp, 5).forEach(v => { const y = YP(v); if (y < m.t+4 || y > m.t+ih-2) return; g += `<text x="${m.l+iw+8}" y="${(y+3.5).toFixed(1)}" style="fill:#f5a524">$${fmtK(v)}</text>`; });
+  if (prs.length) ticks(pA, pB, 5).forEach(v => { const y = YP(v); if (y < m.t+4 || y > m.t+ih-2) return; g += `<text x="${m.l+iw+8}" y="${(y+3.5).toFixed(1)}" style="fill:#f5a524">$${fmtK(v)}</text>`; });
   const y0 = Y(0); L.forEach((x, i) => { const y = Y(x.inf); g += `<rect x="${(X(i)-bw*0.35).toFixed(1)}" y="${Math.min(y,y0).toFixed(1)}" width="${Math.max(1, bw*0.7).toFixed(2)}" height="${Math.max(0.5, Math.abs(y0-y)).toFixed(1)}" fill="${x.inf >= 0 ? '#16c784' : '#ea3943'}"/>`; });
   g += `<line x1="${m.l}" x2="${m.l+iw}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}" stroke="#3a4048"/>`;
   const lin = (f, Yf, cor, w) => { let dd = '', on = false; L.forEach((x, i) => { const v = f(x); if (v == null){ on = false; return; } dd += (on ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Yf(v).toFixed(1); on = true; }); return dd ? `<path d="${dd}" fill="none" stroke="${cor}" stroke-width="${w}" stroke-linejoin="round"/>` : ''; };
@@ -4239,6 +4279,7 @@ function exGrafico(){
     const tw = tip.offsetWidth; tip.style.left = (cx + 14 + tw > W ? cx - tw - 8 : cx + 14) + 'px'; tip.style.top = (m.t + 6) + 'px';
   });
   svg.querySelector('.alvo').addEventListener('pointerleave', () => { tip.style.display = 'none'; cruz.setAttribute('visibility', 'hidden'); });
+  escalaY(box, svg, m, iw, ih, 'exG', () => exGrafico(), {e:'l', p:'r'});
 }
 function exTabela(){
   const el = $('#exTab'); if (!el) return;
@@ -4351,11 +4392,12 @@ function desenhaPilha(c){
   const pr = PRECO_OFF[c.id] ? [] : (serie('btc_preco') || []).filter(p => p[0] >= ds[0] && p[0] <= ds[ds.length-1] && p[1] > 0).map(p => { const q = [p[0], p[1]]; q._n = dnum(p[0]); return q; });
   const W = Math.max(280, el.clientWidth - 12), H = c.hFix || altMax(el, innerWidth < 640 ? 280 : Math.max(400, Math.min(500, Math.round(innerHeight*0.52))));
   const m = {l:48, r:68, t:12, b:24}, iw = W-m.l-m.r, ih = H-m.t-m.b, X = n => m.l + (n-x0)/span*iw;
-  const b = Math.max(1, ...pil.map(p => p[1]))*1.06, Y = v => m.t + (1 - v/b)*ih;
+  const [ya, b] = escY(c.id, 'e', 0, Math.max(1, ...pil.map(p => p[1]))*1.06), Y = v => m.t + (1 - (v-ya)/(b-ya))*ih;
   let la = 0, lb = 1; if (pr.length){ la = Math.log10(Math.min(...pr.map(p=>p[1]))); lb = Math.log10(Math.max(...pr.map(p=>p[1]))); const pp = (lb-la)*0.05 || 0.05; la -= pp; lb += pp; }
+  [la, lb] = escY(c.id, 'p', la, lb);
   const YP = v => m.t + (1-(Math.log10(v)-la)/(lb-la))*ih;
   let g = '';
-  ticks(0, b, Math.max(3, Math.round(ih/48))).forEach(v => { const y = Y(v); if (y < m.t-1) return; g += `<line x1="${m.l}" x2="${m.l+iw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#20242a"/><text x="${m.l-8}" y="${(y+3.5).toFixed(1)}" text-anchor="end">${esc(c.fmtE(v))}</text>`; });
+  ticks(Math.max(0, ya), b, Math.max(3, Math.round(ih/48))).forEach(v => { const y = Y(v); if (y < m.t-1 || y > m.t+ih+1) return; g += `<line x1="${m.l}" x2="${m.l+iw}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#20242a"/><text x="${m.l-8}" y="${(y+3.5).toFixed(1)}" text-anchor="end">${esc(c.fmtE(v))}</text>`; });
   if (pr.length){ const cand = []; for (let k = Math.floor(la); k <= Math.ceil(lb); k++) [1,2,5].forEach(f => { const v = f*Math.pow(10,k), lv = Math.log10(v); if (lv >= la && lv <= lb) cand.push(v); });
     let ultY = -99; cand.sort((p,q)=>q-p).forEach(v => { const y = YP(v); if (Math.abs(y-ultY) < 20) return; ultY = y; g += `<text x="${m.l+iw+8}" y="${(y+3.5).toFixed(1)}">$${fmtK(v)}</text>`; }); }
   if (span > 540){ for (let ano = +ds[0].slice(0,4)+1; ano <= +ds[ds.length-1].slice(0,4); ano++){ if (span > 2500 && ano % 2) continue; const x = X(dnum(ano + '-01-01')); g += `<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle" style="fill:#c3cad8">${ano}</text>`; } }
@@ -4377,6 +4419,7 @@ function desenhaPilha(c){
   });
   svg.querySelector('.alvo').addEventListener('pointerleave', () => { tip.style.display = 'none'; cruz.setAttribute('visibility', 'hidden'); });
   zoomArrasto(el, svg, m, iw, ih, x0, span, r => { ZOOM[c.id] = r; desenhaFut(c); }, !!ZOOM[c.id]);
+  escalaY(el, svg, m, iw, ih, c.id, () => desenhaFut(c), pr.length ? {e:'l', p:'r'} : {e:'l'});
   $('#l_'+c.id).innerHTML = c.ler ? c.ler() : '';
 }
 // linha do meio das bandas estruturais: média geométrica entre o topo do suporte e a base da resistência
@@ -4394,7 +4437,7 @@ function desenhaMulti(c){
   const W = Math.max(280, el.clientWidth - 12), H = c.hFix || altMax(el, innerWidth < 640 ? 300 : Math.max(420, Math.min(540, Math.round(innerHeight*0.58))));
   const m = {l:54, r:70, t:12, b:24}, iw = W-m.l-m.r, ih = H-m.t-m.b, X = n => m.l + (n-x0)/(span || 1)*iw;
   const semP = (PRECO_OFF[c.id] || pr.length < 2) && L.length, todos = (semP ? [] : pr).concat(...L.map(x => x.pts.filter(p => p._n >= x0)));
-  let la = Math.log10(Math.min(...todos.map(p=>p[1]))), lb = Math.log10(Math.max(...todos.map(p=>p[1]))); const pp = (lb-la)*0.04 || 0.05; la -= pp; lb += pp;
+  let la = Math.log10(Math.min(...todos.map(p=>p[1]))), lb = Math.log10(Math.max(...todos.map(p=>p[1]))); const pp = (lb-la)*0.04 || 0.05; la -= pp; lb += pp; [la, lb] = escY(c.id, 'e', la, lb);
   const Y = v => m.t + (1-(Math.log10(v)-la)/(lb-la))*ih;
   let g = '';
   const cand = []; if (lb - la < 1.2){ const v0 = Math.pow(10, la), v1 = Math.pow(10, lb), br = (v1 - v0)/6, e = Math.pow(10, Math.floor(Math.log10(br))), st = [1,2,2.5,5,10].map(x => x*e).find(x => x >= br) || 10*e;
@@ -4431,6 +4474,7 @@ function desenhaMulti(c){
   });
   svg.querySelector('.alvo').addEventListener('pointerleave', () => { tip.style.display = 'none'; cruz.setAttribute('visibility', 'hidden'); });
   zoomArrasto(el, svg, m, iw, ih, x0, span, r => { ZOOM[c.id] = r; desenhaFut(c); }, !!ZOOM[c.id]);
+  escalaY(el, svg, m, iw, ih, c.id, () => desenhaFut(c), {e:'l'});
   $('#l_'+c.id).innerHTML = c.ler ? c.ler() : '';
 }
 function desenhaFut(c){
@@ -4460,8 +4504,10 @@ function desenhaFut(c){
   if (c.topo0 && a < -100) a = -100;
   const LG = c.log ? (v => Math.log10(Math.max(v, 1e-9))) : (v => v);
   if (c.log){ a = Math.log10(Math.max(1e-9, Math.min(...pts.map(p=>p[1])))); b = Math.log10(Math.max(...pts.map(p=>p[1]))); if (c.ref != null){ a = Math.min(a, Math.log10(c.ref)); b = Math.max(b, Math.log10(c.ref)); } const pd = (b-a)*0.05 || 0.05; a -= pd; b += pd; }
+  [a, b] = escY(c.id, 'e', a, b);
   const Y = v => m.t + (1-(LG(v)-a)/(b-a))*ih;
   let la = 0, lb = 1; if (pr.length){ la = Math.log10(Math.min(...pr.map(p=>p[1]))); lb = Math.log10(Math.max(...pr.map(p=>p[1]))); const pp = (lb-la)*0.05 || 0.05; la -= pp; lb += pp; }
+  [la, lb] = escY(c.id, 'p', la, lb);
   const YP = v => m.t + (1-(Math.log10(v)-la)/(lb-la))*ih;
   const corBar = v => c.corUnica || ((c.inv ? v <= 0 : v >= 0) ? FUT_COR.pos : FUT_COR.neg);
   const h0 = serOff(c.id, 0), h1 = serOff(c.id, 1), umLeg = c.leg.length < 2, barOff = v => umLeg ? h0 : (corBar(v) === FUT_COR.pos ? h0 : h1), tudoOff = c.tipo === 'barra' || c.tipo === 'espelho' ? (umLeg ? h0 : h0 && h1) : h0;
@@ -4525,6 +4571,7 @@ function desenhaFut(c){
   });
   svg.querySelector('.alvo').addEventListener('pointerleave', () => { tip.style.display = 'none'; cruz.setAttribute('visibility', 'hidden'); });
   zoomArrasto(el, svg, m, iw, ih, x0, span, r => { ZOOM[c.id] = r; desenhaFut(c); }, !!ZOOM[c.id]);
+  escalaY(el, svg, m, iw, ih, c.id, () => desenhaFut(c), pr.length ? {e:'l', p:'r'} : {e:'l'});
   $('#l_'+c.id).innerHTML = c.ler ? c.ler(s0[s0.length-1], s0) : '';
 }
 document.addEventListener('click', ev => {
